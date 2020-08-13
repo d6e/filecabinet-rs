@@ -8,4 +8,5 @@ edition = "2018"
 
 [dependencies]
 clap = "2.33.2"
+rocket = "0.4.5"
 

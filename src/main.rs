@@ -1,3 +1,5 @@
+#![feature(proc_macro_hygiene, decl_macro)]
+#[macro_use] extern crate rocket;
 #[allow(dead_code)]
 use std::fs::{File, read_to_string};
 use std::{thread, time};
@@ -17,7 +19,7 @@ fn get_program_input() -> Config {
     let matches = App::new("filecabinet")
         .version("1.0")
         .author("Danielle <filecabinet@d6e.io>")
-        .about("Filecabinet - A scanned file solution.")
+        .about("Filecabinet - A secure solution to managing scanned files.")
         .arg(Arg::with_name(name_verbose)
             .short("v")
             .long(name_verbose)
@@ -36,8 +38,15 @@ fn get_program_input() -> Config {
     }
 }
 
+
+#[get("/")]
+fn index() -> &'static str {
+    "Hello, world!"
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let config = get_program_input();
+    rocket::ignite().mount("/", routes![index]).launch();
 
     println!("Starting filecabinet...");
     Ok(())
