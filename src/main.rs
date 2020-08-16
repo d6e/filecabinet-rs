@@ -9,6 +9,19 @@ use std::io::prelude::*;
 use clap::{Arg, App, SubCommand, value_t};
 use cocoon::{Cocoon, Creation};
 use rand::rngs::ThreadRng;
+use glob::glob;
+use std::path::Path;
+use rocket::request::Form;
+use std::fs;
+
+#[derive(FromForm, Clone)]
+struct Document {
+    original_file: String,
+    time: String,
+    institution: String,
+    document_name: String,
+    page: String
+}
 
 struct Config {
     verbose: bool,
@@ -38,6 +51,15 @@ fn get_program_input() -> Config {
     }
 }
 
+#[post("/document", data = "<doc>")]
+fn new(doc: Form<Document>) -> Result<(), Box<dyn Error>> {
+    let cocoon = Cocoon::new(b"password");
+    let mut file = File::create(format!("{}_{}_{}_{}.cocoon", doc.time, doc.institution, doc.document_name, doc.page))?;
+    let data: String = fs::read_to_string(&doc.original_file)?;
+    encrypt_file(&cocoon, &mut file, data.as_bytes().to_vec())?;
+    Ok(())
+}
+
 fn encrypt_file(cocoon: &Cocoon<ThreadRng, Creation>, file: &mut File, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
     cocoon.dump(data, file).unwrap();
     Ok(())
@@ -48,20 +70,31 @@ fn decrypt_file(cocoon: &Cocoon<ThreadRng, Creation>, file: &mut File) -> Result
     Ok(())
 }
 
+fn list_files() -> glob::Paths {
+    glob("./*").expect("Can't read directory.")
+}
+
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world!"
 }
 
+
+// #[get("/files", format = "json")]
+// fn files() -> Vec<String> {
+//     list_files().map()
+// }
+
+
 fn main() -> Result<(), Box<dyn Error>> {
     let config = get_program_input();
 
-    let cocoon = Cocoon::new(b"password");
-    let mut file = File::create("foo.cocoon")?;
-    encrypt_file(&cocoon, &mut file, "data".as_bytes().to_vec());
+    // let cocoon = Cocoon::new(b"password");
+    // let mut file = File::create("foo.cocoon")?;
+    // encrypt_file(&cocoon, &mut file, "data".as_bytes().to_vec());
 
-    let mut unencrypted_file = File::create("foo.txt")?;
-    decrypt_file(&cocoon, &mut unencrypted_file);
+    // let mut unencrypted_file = File::create("foo.txt")?;
+    // decrypt_file(&cocoon, &mut unencrypted_file);
 
     if config.launch_web {
         rocket::ignite().mount("/", routes![index]).launch();
