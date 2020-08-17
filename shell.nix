@@ -4,7 +4,7 @@ let
   sources = import ./nix/sources.nix;
   rust_ = import ./nix/rust.nix { inherit sources; };
   rust = rust_.override {
-    extensions = [ "rust-src" "rust-analysis" ];
+    extensions = [ "rust-src" "rls-preview" "rust-analysis" "rustfmt-preview" ];
   };
   pkgs = import sources.nixpkgs {};
   filecabinet = (import ./default.nix {}).filecabinet;
