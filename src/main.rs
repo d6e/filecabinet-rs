@@ -13,6 +13,10 @@ use glob::glob;
 use std::path::Path;
 use rocket::request::Form;
 use std::fs;
+use rocket::response::content;
+use error_chain::error_chain;
+use std::path::PathBuf;
+use serde_json::Value;
 
 #[derive(FromForm, Clone)]
 struct Document {
@@ -51,6 +55,23 @@ fn get_program_input() -> Config {
     }
 }
 
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let config = get_program_input();
+
+    // let cocoon = Cocoon::new(b"password");
+    // let mut file = File::create("foo.cocoon")?;
+    // encrypt_file(&cocoon, &mut file, "data".as_bytes().to_vec());
+
+    // let mut unencrypted_file = File::create("foo.txt")?;
+    // decrypt_file(&cocoon, &mut unencrypted_file);
+
+    if config.launch_web {
+        rocket::ignite().mount("/", routes![index, files, new]).launch();
+    }
+    Ok(())
+}
+
 #[post("/document", data = "<doc>")]
 fn new(doc: Form<Document>) -> Result<(), Box<dyn Error>> {
     let cocoon = Cocoon::new(b"password");
@@ -70,8 +91,8 @@ fn decrypt_file(cocoon: &Cocoon<ThreadRng, Creation>, file: &mut File) -> Result
     Ok(())
 }
 
-fn list_files() -> glob::Paths {
-    glob("./*").expect("Can't read directory.")
+fn list_files() -> Vec<PathBuf> {
+    glob("./*").expect("Can't read directory.").map(|e| e.unwrap().into()).collect()
 }
 
 #[get("/")]
@@ -79,25 +100,14 @@ fn index() -> &'static str {
     "Hello, world!"
 }
 
-
-// #[get("/files", format = "json")]
-// fn files() -> Vec<String> {
-//     list_files().map()
-// }
-
-
-fn main() -> Result<(), Box<dyn Error>> {
-    let config = get_program_input();
-
-    // let cocoon = Cocoon::new(b"password");
-    // let mut file = File::create("foo.cocoon")?;
-    // encrypt_file(&cocoon, &mut file, "data".as_bytes().to_vec());
-
-    // let mut unencrypted_file = File::create("foo.txt")?;
-    // decrypt_file(&cocoon, &mut unencrypted_file);
-
-    if config.launch_web {
-        rocket::ignite().mount("/", routes![index]).launch();
-    }
-    Ok(())
+#[get("/files")]
+fn files() -> content::Json<String> {
+    let files: Vec<String> = list_files().iter()
+        .map(|x| x.to_str()
+            .unwrap()
+            .to_owned()
+        ).collect();
+    let value: Value = serde_json::json!(files);
+    let s: String = serde_json::from_value(value).unwrap();
+    content::Json(s)
 }
