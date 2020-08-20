@@ -5,10 +5,15 @@ use clap::{value_t, App, Arg, SubCommand};
 use cocoon::{Cocoon, Creation};
 use error_chain::error_chain;
 use glob::glob;
+use itertools::chain;
 use rand::rngs::ThreadRng;
 use rocket::request::Form;
 use rocket::response::content;
+use rocket::State;
+use rocket_contrib::json::{Json, JsonValue};
+use serde;
 use serde_json::Value;
+use std::env;
 use std::error::Error;
 use std::fs;
 #[allow(dead_code)]
@@ -31,15 +36,18 @@ struct Document {
 struct Config {
     verbose: bool,
     launch_web: bool,
+    target_directory: String,
 }
 
 fn get_program_input() -> Config {
     let name_verbose = "verbose";
     let name_launch_web = "web";
+    let name_target_directory = "target-directory";
+    let default_target_directory = String::new();
     let matches = App::new("filecabinet")
         .version("1.0")
         .author("Danielle <filecabinet@d6e.io>")
-        .about("Filecabinet - A secure solution to managing scanned files.")
+        .about("Filecabinet - A relatively secure solution to managing scanned files.")
         .arg(
             Arg::with_name(name_verbose)
                 .short("v")
@@ -53,10 +61,20 @@ fn get_program_input() -> Config {
                 .long(name_launch_web)
                 .help("Launches the web server."),
         )
+        .arg(
+            Arg::with_name(name_target_directory)
+                .short("d")
+                .long(name_target_directory)
+                .takes_value(true)
+                .value_name("DIR")
+                .help("Target directory for archival."),
+        )
         .get_matches();
     Config {
         verbose: matches.is_present(name_verbose),
         launch_web: matches.is_present(name_launch_web),
+        target_directory: value_t!(matches, name_target_directory, String)
+            .unwrap_or(default_target_directory),
     }
 }
 
@@ -73,6 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     if config.launch_web {
         rocket::ignite()
             .mount("/", routes![index, files, new])
+            .manage(config)
             .launch();
     }
     Ok(())
@@ -107,11 +126,14 @@ fn decrypt_file(
     Ok(())
 }
 
-fn list_files() -> Vec<PathBuf> {
-    glob("./*")
-        .expect("Can't read directory.")
-        .map(|e| e.unwrap().into())
-        .collect()
+fn list_files(directory: &PathBuf) -> Vec<PathBuf> {
+    env::set_current_dir(directory).unwrap();
+    chain(
+        glob("*.pdf").expect("Can't read directory."),
+        glob("*.jpg").expect("Can't read directory."),
+    )
+    .map(|e| e.unwrap().into())
+    .collect()
 }
 
 #[get("/")]
@@ -120,12 +142,10 @@ fn index() -> &'static str {
 }
 
 #[get("/files")]
-fn files() -> content::Json<String> {
-    let files: Vec<String> = list_files()
+fn files(config: State<Config>) -> JsonValue {
+    let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory))
         .iter()
         .map(|x| x.to_str().unwrap().to_owned())
         .collect();
-    let value: Value = serde_json::json!(files);
-    let s: String = serde_json::from_value(value).unwrap();
-    content::Json(s)
+    JsonValue(serde_json::json!(files))
 }

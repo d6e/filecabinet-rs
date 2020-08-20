@@ -26,8 +26,8 @@ in
         shellcheck.enable = true;
         nixpkgs-fmt.enable = true;
         nix-linter.enable = true;
-        rustfmt.enable = true;
-        clippy.enable = true;
+        rustfmt.enable = false;
+        clippy.enable = false;
         cargo-check.enable = true;
         yamllint.enable = false;
       };
