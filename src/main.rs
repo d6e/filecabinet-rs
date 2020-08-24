@@ -44,7 +44,7 @@ fn get_program_input() -> Config {
     let name_verbose = "verbose";
     let name_launch_web = "web";
     let name_target_directory = "target-directory";
-    let default_target_directory = String::new();
+    let default_target_directory: String = String::from("./");
     let matches = App::new("filecabinet")
         .version("1.0")
         .author("Danielle <filecabinet@d6e.io>")
@@ -68,14 +68,12 @@ fn get_program_input() -> Config {
                 .long(name_target_directory)
                 .takes_value(true)
                 .value_name("DIR")
-                .help("Target directory for archival."),
-        )
-        .get_matches();
+                .help("Target directory for archival.")
+        ).get_matches();
     Config {
         verbose: matches.is_present(name_verbose),
         launch_web: matches.is_present(name_launch_web),
-        target_directory: value_t!(matches, name_target_directory, String)
-            .unwrap_or(default_target_directory),
+        target_directory: value_t!(matches, name_target_directory, String).unwrap_or(default_target_directory),
     }
 }
 
@@ -87,18 +85,24 @@ fn with_config(config: Config) -> impl Filter<Extract = (Config,), Error = Infal
 async fn main() {
     let config = get_program_input();
 
-    let health_route = warp::path!("health")
-        .map(|| StatusCode::OK);
     let index_route = warp::path::end()
         .and_then(index)
         .map(|body| {
             warp::reply::html(body)
         });
 
+    let health_route = warp::path!("health")
+        .map(|| StatusCode::OK);
+
+    let files_route = warp::path("files")
+        .and(with_config(config))
+        .and_then(endpoint_files);
 
     let routes = health_route
-            .with(warp::cors().allow_any_origin())
-        .or(index_route);
+        .or(index_route)
+        .or(files_route)
+        .with(warp::cors().allow_any_origin());
+
 
     warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
 }
@@ -162,6 +166,7 @@ async fn index() -> Result<String, Rejection>  {
 }
 
 fn list_files(directory: &PathBuf) -> Vec<PathBuf> {
+    println!("directory={:?}", directory);
     env::set_current_dir(directory).unwrap();
     chain(
         glob("*.pdf").expect("Can't read directory."),
@@ -176,5 +181,5 @@ async fn endpoint_files(config: Config) -> Result<impl Reply, Rejection> {
         .iter()
         .map(|x| x.to_str().unwrap().to_owned())
         .collect();
-    Ok(json(&files))
+    Ok(warp::reply::json(&files))
 }
