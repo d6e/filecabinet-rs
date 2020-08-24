@@ -1,30 +1,30 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 #[macro_use]
-extern crate rocket;
+
 use clap::{value_t, App, Arg, SubCommand};
 use cocoon::{Cocoon, Creation};
 use error_chain::error_chain;
 use glob::glob;
 use itertools::chain;
 use rand::rngs::ThreadRng;
-use rocket::request::Form;
-use rocket::response::content;
-use rocket::State;
-use rocket_contrib::json::{Json, JsonValue};
+use tera::Context;
 use serde;
 use serde_json::Value;
 use std::env;
 use std::error::Error;
 use std::fs;
-#[allow(dead_code)]
 use std::fs::{read_to_string, File};
 use std::io::prelude::*;
 use std::path::Path;
 use std::path::PathBuf;
 use std::thread;
+use std::convert::Infallible;
+use std::net::SocketAddr;
 use std::time::{SystemTime, UNIX_EPOCH};
+use warp::{Filter, http::StatusCode, reject, Reply, Rejection, reply::json};
+use askama::Template;
 
-#[derive(FromForm, Clone)]
+#[derive(Clone)]
 struct Document {
     original_file: String,
     time: String,
@@ -33,6 +33,7 @@ struct Document {
     page: String,
 }
 
+#[derive(Clone)]
 struct Config {
     verbose: bool,
     launch_web: bool,
@@ -78,9 +79,31 @@ fn get_program_input() -> Config {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn with_config(config: Config) -> impl Filter<Extract = (Config,), Error = Infallible> + Clone {
+    warp::any().map(move || config.clone())
+}
+
+#[tokio::main]
+async fn main() {
     let config = get_program_input();
 
+    let health_route = warp::path!("health")
+        .map(|| StatusCode::OK);
+    let index_route = warp::path::end()
+        .and_then(index)
+        .map(|body| {
+            warp::reply::html(body)
+        });
+
+
+    let routes = health_route
+            .with(warp::cors().allow_any_origin())
+        .or(index_route);
+
+    warp::serve(routes).run(([127, 0, 0, 1], 8000)).await;
+}
+
+// fn main() -> Result<(), Box<dyn Error>> {
     // let cocoon = Cocoon::new(b"password");
     // let mut file = File::create("foo.cocoon")?;
     // encrypt_file(&cocoon, &mut file, "data".as_bytes().to_vec());
@@ -88,26 +111,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     // let mut unencrypted_file = File::create("foo.txt")?;
     // decrypt_file(&cocoon, &mut unencrypted_file);
 
-    if config.launch_web {
-        rocket::ignite()
-            .mount("/", routes![index, files, new])
-            .manage(config)
-            .launch();
-    }
-    Ok(())
-}
+//     Ok(())
+// }
 
-#[post("/document", data = "<doc>")]
-fn new(doc: Form<Document>) -> Result<(), Box<dyn Error>> {
-    let cocoon = Cocoon::new(b"password");
-    let mut file = File::create(format!(
-        "{}_{}_{}_{}.cocoon",
-        doc.time, doc.institution, doc.document_name, doc.page
-    ))?;
-    let data: String = fs::read_to_string(&doc.original_file)?;
-    encrypt_file(&cocoon, &mut file, data.as_bytes().to_vec())?;
-    Ok(())
-}
+// #[post("/document", data = "<doc>")]
+// fn new(doc: Form<Document>) -> Result<(), Box<dyn Error>> {
+//     let cocoon = Cocoon::new(b"password");
+//     let mut file = File::create(format!(
+//         "{}_{}_{}_{}.cocoon",
+//         doc.time, doc.institution, doc.document_name, doc.page
+//     ))?;
+//     let data: String = fs::read_to_string(&doc.original_file)?;
+//     encrypt_file(&cocoon, &mut file, data.as_bytes().to_vec())?;
+//     Ok(())
+// }
 
 fn encrypt_file(
     cocoon: &Cocoon<ThreadRng, Creation>,
@@ -126,6 +143,24 @@ fn decrypt_file(
     Ok(())
 }
 
+
+#[derive(Template, Clone)]
+#[template(path = "index.html")]
+struct IndexTemplate<'a> {
+    name: &'a str,
+}
+
+// impl Clone for IndexTemplate {
+//     fn clone(&self) -> IndexTemplate {
+//         IndexTemplate { name: self.name }
+//     }
+// }
+
+async fn index() -> Result<String, Rejection>  {
+    let hello = IndexTemplate { name: "world" };
+    Ok(hello.render().unwrap())
+}
+
 fn list_files(directory: &PathBuf) -> Vec<PathBuf> {
     env::set_current_dir(directory).unwrap();
     chain(
@@ -136,16 +171,10 @@ fn list_files(directory: &PathBuf) -> Vec<PathBuf> {
     .collect()
 }
 
-#[get("/")]
-fn index() -> &'static str {
-    "Hello, world!"
-}
-
-#[get("/files")]
-fn files(config: State<Config>) -> JsonValue {
+async fn endpoint_files(config: Config) -> Result<impl Reply, Rejection> {
     let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory))
         .iter()
         .map(|x| x.to_str().unwrap().to_owned())
         .collect();
-    JsonValue(serde_json::json!(files))
+    Ok(json(&files))
 }
