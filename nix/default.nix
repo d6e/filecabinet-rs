@@ -28,7 +28,7 @@ in
         nix-linter.enable = true;
         rustfmt.enable = false;
         clippy.enable = false;
-        cargo-check.enable = true;
+        cargo-check.enable = false;
         yamllint.enable = false;
       };
       # generated files
