@@ -9,3 +9,4 @@ result-*
 
 /target
 *.pdf
+node_modules

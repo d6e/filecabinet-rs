@@ -25,6 +25,7 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::collections::HashMap;
+use rocket_contrib::serve::StaticFiles;
 
 #[derive(FromForm, Clone)]
 struct Document {
@@ -92,6 +93,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if config.launch_web {
         rocket::ignite()
+             .mount("/node_modules", StaticFiles::from("node_modules"))
+            .mount("/static", StaticFiles::from("static"))
             .mount("/", routes![index, files, new])
             .manage(config)
             .attach(Template::fairing())
@@ -130,6 +133,9 @@ fn decrypt_file(
 }
 
 fn list_files(directory: &PathBuf) -> Vec<PathBuf> {
+    if !directory.exists() {
+        return Vec::new(); // TODO: turn this into an optional
+    }
     env::set_current_dir(directory).unwrap();
     chain(
         glob("*.pdf").expect("Can't read directory."),
@@ -142,7 +148,7 @@ fn list_files(directory: &PathBuf) -> Vec<PathBuf> {
 #[get("/")]
 fn index() -> Template {
     let mut context = HashMap::new();
-    context.insert("boop".to_string(), "boop".to_string());
+    context.insert("filename".to_string(), "uboot.pdf".to_string());
     Template::render("index", &context)
 }
 

@@ -7,19 +7,19 @@ let
     extensions = [ "rust-src" "rls-preview" "rust-analysis" "rustfmt-preview" ];
   };
   pkgs = import sources.nixpkgs {};
-  filecabinet = (import ./default.nix {}).filecabinet;
+  #filecabinet = (import ./default.nix {}).filecabinet;
 in
 project.pkgs.mkShell {
   buildInputs = builtins.attrValues project.devTools ++ [
     project.pkgs.cargo-edit
     rust
-    filecabinet
     pkgs.openssl
     pkgs.pkg-config
     pkgs.nasm
     pkgs.rustup
     pkgs.cmake
     pkgs.zlib
+    pkgs.yarn
   ];
   shellHook = ''
     ${project.ci.pre-commit-check.shellHook}
