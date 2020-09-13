@@ -26,6 +26,8 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::collections::HashMap;
 use rocket_contrib::serve::StaticFiles;
+use chrono::{DateTime, Utc};
+
 
 #[derive(FromForm, Clone)]
 struct Document {
@@ -147,8 +149,10 @@ fn list_files(directory: &PathBuf) -> Vec<PathBuf> {
 
 #[get("/")]
 fn index() -> Template {
+    let now: DateTime<Utc> = Utc::now();
     let mut context = HashMap::new();
     context.insert("filename".to_string(), "uboot.pdf".to_string());
+    context.insert("date".to_string(),  now.format("%Y-%m-%d").to_string());
     Template::render("index", &context)
 }
 
