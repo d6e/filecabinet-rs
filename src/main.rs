@@ -11,6 +11,7 @@ use rocket::request::Form;
 use rocket::response::content;
 use rocket::State;
 use rocket_contrib::json::{Json, JsonValue};
+use rocket_contrib::templates::Template;
 use serde;
 use serde_json::Value;
 use std::env;
@@ -23,6 +24,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::collections::HashMap;
 
 #[derive(FromForm, Clone)]
 struct Document {
@@ -92,6 +94,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         rocket::ignite()
             .mount("/", routes![index, files, new])
             .manage(config)
+            .attach(Template::fairing())
             .launch();
     }
     Ok(())
@@ -137,8 +140,10 @@ fn list_files(directory: &PathBuf) -> Vec<PathBuf> {
 }
 
 #[get("/")]
-fn index() -> &'static str {
-    "Hello, world!"
+fn index() -> Template {
+    let mut context = HashMap::new();
+    context.insert("boop".to_string(), "boop".to_string());
+    Template::render("index", &context)
 }
 
 #[get("/files")]

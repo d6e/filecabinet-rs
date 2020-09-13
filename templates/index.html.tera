@@ -1,0 +1,9 @@
+<html>
+  <head>
+    <title>Index.html.tera</title>
+  </head>
+  <body>
+    <h1>{{ boop }}</h1>
+    </h1>
+  </body>
+</html>
