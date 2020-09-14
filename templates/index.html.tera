@@ -8,6 +8,14 @@
 
   <form action="/document" method="post">
     <table>
+        <tr>
+        <td>
+          <label for="orig_name">Original Name:</label>
+        </td>
+        <td>
+          <input type="orig_name" id="orig_name" name="orig_name" value="{{ filename }}" readonly="readonly">
+        </td>
+      </tr>
       <tr>
         <td>
           <label for="date">Date:</label>
@@ -30,7 +38,7 @@
           <label for="name">Name:</label>
         </td>
         <td>
-          <input type="text" id="name" name="name" value="{{ filename }}" required>
+          <input type="text" id="name" name="name" required>
         </td>
       </tr>
       <tr>
@@ -43,7 +51,7 @@
       </tr>
       <tr class="button">
         <td>
-          <button type="submit">Submit</button>
+          <button type="submit">Change</button>
         </td>
       </tr>
     </table>

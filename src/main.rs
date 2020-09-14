@@ -31,10 +31,10 @@ use chrono::{DateTime, Utc};
 
 #[derive(FromForm, Clone)]
 struct Document {
-    original_file: String,
-    time: String,
+    orig_name: String,
+    date: String,
     institution: String,
-    document_name: String,
+    name: String,
     page: String,
 }
 
@@ -109,11 +109,14 @@ fn main() -> Result<(), Box<dyn Error>> {
 fn new(doc: Form<Document>) -> Result<(), Box<dyn Error>> {
     let cocoon = Cocoon::new(b"password");
     let mut file = File::create(format!(
-        "{}_{}_{}_{}.cocoon",
-        doc.time, doc.institution, doc.document_name, doc.page
+        "static/{}_{}_{}_{}.cocoon",
+        doc.date, doc.institution, doc.name, doc.page
     ))?;
-    let data: String = fs::read_to_string(&doc.original_file)?;
-    encrypt_file(&cocoon, &mut file, data.as_bytes().to_vec())?;
+
+    let mut f = File::open(format!("static/{}",&doc.orig_name))?;
+    let mut buffer = Vec::new();
+    f.read_to_end(&mut buffer)?;
+    encrypt_file(&cocoon, &mut file, buffer)?;
     Ok(())
 }
 
