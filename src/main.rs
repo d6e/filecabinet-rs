@@ -18,6 +18,7 @@ use std::io::prelude::*;
 use std::collections::HashMap;
 use rocket_contrib::serve::StaticFiles;
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 mod crypto;
 mod cli;
 
@@ -32,14 +33,6 @@ struct Document {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let config = cli::get_program_input();
-
-    // let cocoon = Cocoon::new(b"password");
-    // let mut file = File::create("foo.cocoon")?;
-    // encrypt_file(&cocoon, &mut file, "data".as_bytes().to_vec());
-
-    // let mut unencrypted_file = File::create("foo.txt")?;
-    // decrypt_file(&cocoon, &mut unencrypted_file);
-
     if config.launch_web {
         rocket::ignite()
              .mount("/node_modules", StaticFiles::from("node_modules"))
@@ -50,6 +43,35 @@ fn main() -> Result<(), Box<dyn Error>> {
             .launch();
     }
     Ok(())
+}
+
+#[derive(Serialize)]
+struct Context {
+  filename: String,
+  date: String,
+  files: Vec<String>
+}
+
+#[get("/")]
+fn index(config: State<cli::Config>) -> Template {
+    let now: DateTime<Utc> = Utc::now();
+    let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory)).iter().map(|x|x.to_str().unwrap().to_owned()).collect();
+    let context = Context {
+        filename: "uboot.pdf".to_string(),
+        date: now.format("%Y-%m-%d").to_string(),
+        files: files,
+    };
+    Template::render("index", &context)
+}
+
+#[get("/files")]
+fn files(config: State<cli::Config>) -> JsonValue {
+    println!("target_dir={}", &config.target_directory);
+    let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory))
+        .iter()
+        .map(|x| x.to_str().unwrap().to_owned())
+        .collect();
+    JsonValue(serde_json::json!(files))
 }
 
 #[post("/document", data = "<doc>")]
@@ -70,29 +92,11 @@ fn list_files(directory: &PathBuf) -> Vec<PathBuf> {
     if !directory.exists() {
         return Vec::new(); // TODO: turn this into an optional
     }
-    env::set_current_dir(directory).unwrap();
     chain(
-        glob("*.pdf").expect("Can't read directory."),
-        glob("*.jpg").expect("Can't read directory."),
+        glob("static/*.pdf").expect("Can't read directory."),
+        glob("static/*.jpg").expect("Can't read directory."),
     )
-    .map(|e| e.unwrap().into())
+    // .map(|e| e.unwrap().into())
+    .map(|x| x.unwrap().strip_prefix("static/").unwrap().into())
     .collect()
-}
-
-#[get("/")]
-fn index() -> Template {
-    let now: DateTime<Utc> = Utc::now();
-    let mut context = HashMap::new();
-    context.insert("filename".to_string(), "uboot.pdf".to_string());
-    context.insert("date".to_string(),  now.format("%Y-%m-%d").to_string());
-    Template::render("index", &context)
-}
-
-#[get("/files")]
-fn files(config: State<cli::Config>) -> JsonValue {
-    let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory))
-        .iter()
-        .map(|x| x.to_str().unwrap().to_owned())
-        .collect();
-    JsonValue(serde_json::json!(files))
 }

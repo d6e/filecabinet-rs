@@ -3,62 +3,83 @@
   <head>
     <meta charset="UTF-8">
     <title>FileCabinet</title>
+    <link rel="stylesheet" type="text/css" href="static/style.css" media="screen" />
   </head>
 <body>
 
-  <form action="/document" method="post">
-    <table>
+<div class="content">
+
+  <div class="sidebar">
+    <div class="box docattr">
+      <h9>Document Attributes</h9>
+      <form action="/document" method="post">
+        <table>
+            <tr>
+            <td>
+              <label for="orig_name">Original Name:</label>
+            </td>
+            <td>
+              <input type="orig_name" id="orig_name" name="orig_name" value="{{ filename }}" readonly="readonly">
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <label for="date">Date:</label>
+            </td>
+            <td>
+              <input type="date" id="date" name="date" value="{{ date }}" required>
+              <date-input date="{{ date }}" timezone="[[timezone]]"></date-input>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <label for="institution">Institution:</label>
+            </td>
+            <td>
+              <input type="text" id="institution" name="institution" required>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <label for="name">Name:</label>
+            </td>
+            <td>
+              <input type="text" id="name" name="name" required>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <label for="page">Page:</label>
+            </td>
+            <td>
+              <input type="number" name="page" id="page" min="1" value="1">
+            </td>
+          </tr>
+          <tr class="button">
+            <td>
+              <button type="submit">Change</button>
+            </td>
+          </tr>
+        </table>
+      </form>
+    </div>
+
+    <div class="box docs">
+      <h9>Documents</h9>
+      <table>
+        {% for file in files %}
         <tr>
-        <td>
-          <label for="orig_name">Original Name:</label>
-        </td>
-        <td>
-          <input type="orig_name" id="orig_name" name="orig_name" value="{{ filename }}" readonly="readonly">
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <label for="date">Date:</label>
-        </td>
-        <td>
-          <input type="date" id="date" name="date" value="{{ date }}" required>
-          <date-input date="{{ date }}" timezone="[[timezone]]"></date-input>
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <label for="institution">Institution:</label>
-        </td>
-        <td>
-          <input type="text" id="institution" name="institution" required>
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <label for="name">Name:</label>
-        </td>
-        <td>
-          <input type="text" id="name" name="name" required>
-        </td>
-      </tr>
-      <tr>
-        <td>
-          <label for="page">Page:</label>
-        </td>
-        <td>
-          <input type="number" name="page" id="page" min="1" value="1">
-        </td>
-      </tr>
-      <tr class="button">
-        <td>
-          <button type="submit">Change</button>
-        </td>
-      </tr>
-    </table>
-  </form>
+          <a href="/static/{{ file }}">{{ file }}</a>
+        </tr>
+        {% endfor %}
+      </table>
+    </div>
+  </div>
 
-  <canvas id="the-canvas" style="border: 1px solid black; direction: ltr;"></canvas>
-
+  <div>
+    <canvas id="the-canvas" style="border: 1px solid black; direction: ltr;"></canvas>
+  </div>
+</div>
   <script src="node_modules/pdfjs-dist/build/pdf.js"></script>
 
   <script id="script">

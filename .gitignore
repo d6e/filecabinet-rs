@@ -5,8 +5,11 @@ result-*
 .pre-commit-config.yaml
 
 
+
 # Added by cargo
 
 /target
 *.pdf
 node_modules
+
+assets/*.cocoon
