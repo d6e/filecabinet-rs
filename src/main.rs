@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use rocket_contrib::serve::StaticFiles;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use std::path::Path;
 mod crypto;
 mod cli;
 
@@ -35,9 +36,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     let config = cli::get_program_input();
     if config.launch_web {
         rocket::ignite()
-             .mount("/node_modules", StaticFiles::from("node_modules"))
+            .mount("/node_modules", StaticFiles::from("node_modules"))
             .mount("/static", StaticFiles::from("static"))
-            .mount("/", routes![index, files, new])
+            .mount("/documents", StaticFiles::from("documents"))
+            .mount("/", routes![index, get_docs, get_doc, new])
             .manage(config)
             .attach(Template::fairing())
             .launch();
@@ -55,7 +57,7 @@ struct Context {
 #[get("/")]
 fn index(config: State<cli::Config>) -> Template {
     let now: DateTime<Utc> = Utc::now();
-    let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory)).iter().map(|x|x.to_str().unwrap().to_owned()).collect();
+    let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory));
     let context = Context {
         filename: "uboot.pdf".to_string(),
         date: now.format("%Y-%m-%d").to_string(),
@@ -64,17 +66,20 @@ fn index(config: State<cli::Config>) -> Template {
     Template::render("index", &context)
 }
 
-#[get("/files")]
-fn files(config: State<cli::Config>) -> JsonValue {
-    println!("target_dir={}", &config.target_directory);
-    let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory))
-        .iter()
-        .map(|x| x.to_str().unwrap().to_owned())
-        .collect();
-    JsonValue(serde_json::json!(files))
+#[get("/doc")]
+fn get_docs(config: State<cli::Config>) -> JsonValue {
+    println!("GET /doc -- listing files in '{}'", &config.target_directory);
+    let docs = list_files(&PathBuf::from(&config.target_directory));
+    println!("docs={:?}", docs);
+    JsonValue(serde_json::json!(docs))
 }
 
-#[post("/document", data = "<doc>")]
+#[get("/doc/<name>")]
+fn get_doc(name: String) -> String {
+    format!("Hello, {}!", name.as_str())
+}
+
+#[post("/doc", data = "<doc>")]
 fn new(doc: Form<Document>) -> Result<(), Box<dyn Error>> {
     let mut file = File::create(format!(
         "static/{}_{}_{}_{}.cocoon",
@@ -88,15 +93,14 @@ fn new(doc: Form<Document>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn list_files(directory: &PathBuf) -> Vec<PathBuf> {
-    if !directory.exists() {
+fn list_files(path: &PathBuf) -> Vec<String> {
+    if !path.exists() {
         return Vec::new(); // TODO: turn this into an optional
     }
-    chain(
-        glob("static/*.pdf").expect("Can't read directory."),
-        glob("static/*.jpg").expect("Can't read directory."),
-    )
-    // .map(|e| e.unwrap().into())
-    .map(|x| x.unwrap().strip_prefix("static/").unwrap().into())
-    .collect()
+    path.read_dir()
+        .expect("read_dir call failed")
+        .map(|x| x.unwrap().path())
+        .filter(|x| x.extension().unwrap() == "pdf" || x.extension().unwrap() == "jpg" || x.extension().unwrap() == "png")
+        .map(|x| x.file_name().unwrap().to_str().unwrap().to_owned())
+        .collect()
 }

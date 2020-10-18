@@ -10,7 +10,7 @@ pub fn get_program_input() -> Config {
     let name_verbose = "verbose";
     let name_launch_web = "web";
     let name_target_directory = "target-directory";
-    let default_target_directory = String::from("static");
+    let default_target_directory = String::from("documents");
     let matches = App::new("filecabinet")
         .version("1.0")
         .author("Danielle <filecabinet@d6e.io>")

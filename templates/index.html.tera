@@ -12,7 +12,7 @@
   <div class="sidebar">
     <div class="box docattr">
       <h9>Document Attributes</h9>
-      <form action="/document" method="post">
+      <form action="/doc" method="post">
         <table>
             <tr>
             <td>
@@ -69,7 +69,7 @@
       <table>
         {% for file in files %}
         <tr>
-          <a href="/static/{{ file }}">{{ file }}</a>
+          <a href="/doc/{{ file }}">{{ file }}</a>
         </tr>
         {% endfor %}
       </table>
@@ -83,7 +83,7 @@
   <script src="node_modules/pdfjs-dist/build/pdf.js"></script>
 
   <script id="script">
-    var url = 'static/{{ filename }}';
+    var url = 'documents/{{ filename }}';
 
     //
     // The workerSrc property shall be specified.
