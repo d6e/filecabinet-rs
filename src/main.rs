@@ -20,6 +20,7 @@ use rocket_contrib::serve::StaticFiles;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::path::Path;
+use rocket::response::Redirect;
 mod crypto;
 mod cli;
 
@@ -87,7 +88,7 @@ fn get_doc(config: State<cli::Config>, name: String) -> Template {
 }
 
 #[post("/doc", data = "<doc>")]
-fn new(doc: Form<Document>) -> Result<(), Box<dyn Error>> {
+fn new(doc: Form<Document>) -> Result<Redirect, Box<dyn Error>> {
     let mut file = File::create(format!(
         "documents/{}_{}_{}_{}.cocoon",
         doc.date, doc.institution, doc.name, doc.page
@@ -97,7 +98,7 @@ fn new(doc: Form<Document>) -> Result<(), Box<dyn Error>> {
     let mut buffer = Vec::new();
     f.read_to_end(&mut buffer)?;
     crypto::encrypt_file(&mut file, buffer)?;
-    Ok(())
+    Ok(Redirect::to("/"))
 }
 
 fn list_files(path: &PathBuf) -> Vec<String> {
@@ -107,7 +108,13 @@ fn list_files(path: &PathBuf) -> Vec<String> {
     path.read_dir()
         .expect("read_dir call failed")
         .map(|x| x.unwrap().path())
-        .filter(|x| x.extension().unwrap() == "pdf" || x.extension().unwrap() == "jpg" || x.extension().unwrap() == "png")
+        .filter(|x| {
+                let ext = x.extension().unwrap();
+                ext == "pdf" ||
+                ext == "jpg" ||
+                ext == "png" ||
+                ext == "cocoon"
+            })
         .map(|x| x.file_name().unwrap().to_str().unwrap().to_owned())
         .collect()
 }
