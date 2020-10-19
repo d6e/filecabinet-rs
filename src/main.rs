@@ -58,15 +58,7 @@ struct Context {
 
 #[get("/")]
 fn index(config: State<cli::Config>) -> Template {
-    let now: DateTime<Utc> = Utc::now();
-    let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory));
-    let context = Context {
-        filename: String::new(),
-        date: now.format("%Y-%m-%d").to_string(),
-        files: files,
-        target_directory: config.target_directory.clone()
-    };
-    Template::render("index", &context)
+    get_doc(config, String::new())
 }
 
 #[get("/doc")]
