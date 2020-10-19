@@ -75,18 +75,25 @@ fn get_docs(config: State<cli::Config>) -> JsonValue {
 }
 
 #[get("/doc/<name>")]
-fn get_doc(name: String) -> String {
-    format!("Hello, {}!", name.as_str())
+fn get_doc(config: State<cli::Config>, name: String) -> Template {
+    let now: DateTime<Utc> = Utc::now();
+    let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory));
+    let context = Context {
+        filename: name,
+        date: now.format("%Y-%m-%d").to_string(),
+        files: files,
+    };
+    Template::render("index", &context)
 }
 
 #[post("/doc", data = "<doc>")]
 fn new(doc: Form<Document>) -> Result<(), Box<dyn Error>> {
     let mut file = File::create(format!(
-        "static/{}_{}_{}_{}.cocoon",
+        "documents/{}_{}_{}_{}.cocoon",
         doc.date, doc.institution, doc.name, doc.page
     ))?;
 
-    let mut f = File::open(format!("static/{}",&doc.orig_name))?;
+    let mut f = File::open(format!("documents/{}",&doc.orig_name))?;
     let mut buffer = Vec::new();
     f.read_to_end(&mut buffer)?;
     crypto::encrypt_file(&mut file, buffer)?;
