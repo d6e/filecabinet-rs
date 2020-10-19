@@ -61,7 +61,7 @@ fn index(config: State<cli::Config>) -> Template {
     let now: DateTime<Utc> = Utc::now();
     let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory));
     let context = Context {
-        filename: "uboot.pdf".to_string(),
+        filename: String::new(),
         date: now.format("%Y-%m-%d").to_string(),
         files: files,
         target_directory: config.target_directory.clone()
