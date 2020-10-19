@@ -84,21 +84,18 @@ fn get_doc(config: State<cli::Config>, name: String) -> Template {
 
 #[post("/doc", data = "<doc>")]
 fn new(config: State<cli::Config>, doc: Form<Document>) -> Result<Redirect, Box<dyn Error>> {
-    let mut file = File::create(format!(
-        "{}/{}_{}_{}_{}.cocoon",
-        &config.target_directory, doc.date, doc.institution, doc.name, doc.page
-    ))?;
-
-    let mut f = File::open(format!("{}/{}", &config.target_directory, &doc.orig_name))?;
+    let file_to_write = Path::new(&config.target_directory)
+        .join(format!("{}_{}_{}_{}.cocoon", doc.date, doc.institution, doc.name, doc.page));
+    let mut unencrypted = File::open(Path::new(&config.target_directory).join(&doc.orig_name))?;
     let mut buffer = Vec::new();
-    f.read_to_end(&mut buffer)?;
-    crypto::encrypt_file(&mut file, buffer)?;
+    unencrypted.read_to_end(&mut buffer)?;
+    crypto::encrypt_file(&mut File::create(file_to_write)?, buffer)?;
     Ok(Redirect::to("/"))
 }
 
 fn list_files(path: &PathBuf) -> Vec<String> {
     if !path.exists() {
-        return Vec::new(); // TODO: turn this into an optional
+        return Vec::new();
     }
     path.read_dir()
         .expect("read_dir call failed")
