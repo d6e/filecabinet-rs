@@ -38,3 +38,7 @@ h9 {
 .content {
     display: flex;
 }
+
+#orig_name {
+    background-color: lightgray;
+}
