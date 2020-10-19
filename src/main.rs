@@ -52,7 +52,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 struct Context {
   filename: String,
   date: String,
-  files: Vec<String>
+  files: Vec<String>,
+  target_directory: String
 }
 
 #[get("/")]
@@ -63,6 +64,7 @@ fn index(config: State<cli::Config>) -> Template {
         filename: "uboot.pdf".to_string(),
         date: now.format("%Y-%m-%d").to_string(),
         files: files,
+        target_directory: config.target_directory.clone()
     };
     Template::render("index", &context)
 }
@@ -83,18 +85,19 @@ fn get_doc(config: State<cli::Config>, name: String) -> Template {
         filename: name,
         date: now.format("%Y-%m-%d").to_string(),
         files: files,
+        target_directory: config.target_directory.clone()
     };
     Template::render("index", &context)
 }
 
 #[post("/doc", data = "<doc>")]
-fn new(doc: Form<Document>) -> Result<Redirect, Box<dyn Error>> {
+fn new(config: State<cli::Config>, doc: Form<Document>) -> Result<Redirect, Box<dyn Error>> {
     let mut file = File::create(format!(
-        "documents/{}_{}_{}_{}.cocoon",
-        doc.date, doc.institution, doc.name, doc.page
+        "{}/{}_{}_{}_{}.cocoon",
+        &config.target_directory, doc.date, doc.institution, doc.name, doc.page
     ))?;
 
-    let mut f = File::open(format!("documents/{}",&doc.orig_name))?;
+    let mut f = File::open(format!("{}/{}", &config.target_directory, &doc.orig_name))?;
     let mut buffer = Vec::new();
     f.read_to_end(&mut buffer)?;
     crypto::encrypt_file(&mut file, buffer)?;
