@@ -90,17 +90,19 @@ fn get_doc(config: State<cli::Config>, name: String) -> Template {
         let mut unecrypted: File = File::create(unencrypted_path.clone()).unwrap();
         unecrypted.write(&data).unwrap();
 
+        let date = parse_date(&unencrypted_name).unwrap();
         let new_context = Context {
             filename: unencrypted_name,
-            date: now.format("%Y-%m-%d").to_string(), // TODO: use date from name
+            date: date,
             files: files,
             target_directory: unencrypted_path.parent().unwrap().to_str().unwrap().to_owned().replace("/", "\\u{002F}")
         };
         return Template::render("index", &new_context);
     } else {
+        let date = parse_date(&name).unwrap_or(now.format("%Y-%m-%d").to_string());
         let context = Context {
             filename: name,
-            date: now.format("%Y-%m-%d").to_string(),
+            date: date,
             files: files,
             target_directory: config.target_directory.clone()
         };
