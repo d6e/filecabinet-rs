@@ -21,6 +21,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::path::Path;
 use rocket::response::Redirect;
+use std::fs;
 mod crypto;
 mod cli;
 
@@ -31,6 +32,7 @@ struct Document {
     institution: String,
     name: String,
     page: String,
+    extension: String
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -48,7 +50,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 struct Context {
   filename: String,
   date: String,
@@ -73,13 +75,36 @@ fn get_docs(config: State<cli::Config>) -> JsonValue {
 fn get_doc(config: State<cli::Config>, name: String) -> Template {
     let now: DateTime<Utc> = Utc::now();
     let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory));
-    let context = Context {
-        filename: name,
-        date: now.format("%Y-%m-%d").to_string(),
-        files: files,
-        target_directory: config.target_directory.clone()
-    };
-    Template::render("index", &context)
+    if name.ends_with(".cocoon") {
+        // If file is encrypted, decrypt to temporary dir and return new file
+        let mut encrypted: File = File::open(Path::new(&config.target_directory).join(name.clone())).unwrap();
+        let data = crypto::decrypt_file(&mut encrypted).unwrap();
+        // let mut unencrypted_path = env::temp_dir(); // TODO: maybe put temp dir under target_driectory
+        let mut unencrypted_path = Path::new(&config.target_directory).join("tmp");
+        if !unencrypted_path.exists() {
+            fs::create_dir(unencrypted_path.clone()).unwrap();
+        }
+        let unencrypted_name = name.replace("cocoon", "pdf");
+        unencrypted_path.push(unencrypted_name.clone());
+        let mut unecrypted: File = File::create(unencrypted_path.clone()).unwrap();
+        unecrypted.write(&data).unwrap();
+
+        let new_context = Context {
+            filename: unencrypted_name,
+            date: now.format("%Y-%m-%d").to_string(), // TODO: use date from name
+            files: files,
+            target_directory: unencrypted_path.parent().unwrap().to_str().unwrap().to_owned().replace("/", "\\u{002F}")
+        };
+        return Template::render("index", &new_context);
+    } else {
+        let context = Context {
+            filename: name,
+            date: now.format("%Y-%m-%d").to_string(),
+            files: files,
+            target_directory: config.target_directory.clone()
+        };
+        return Template::render("index", &context);
+    }
 }
 
 #[post("/doc", data = "<doc>")]
@@ -100,6 +125,7 @@ fn list_files(path: &PathBuf) -> Vec<String> {
     path.read_dir()
         .expect("read_dir call failed")
         .map(|x| x.unwrap().path())
+        .filter(|x| Path::new(x).is_file())
         .filter(|x| {
                 let ext = x.extension().unwrap();
                 ext == "pdf" ||
