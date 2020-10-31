@@ -1,6 +1,6 @@
 #![feature(proc_macro_hygiene, decl_macro)]
-#[macro_use]
-extern crate rocket;
+#[macro_use] extern crate rocket;
+#[macro_use] extern crate lazy_static;
 use error_chain::error_chain;
 use glob::glob;
 use itertools::chain;
@@ -21,6 +21,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::path::Path;
 use rocket::response::Redirect;
+use regex::Regex;
 use std::fs;
 mod crypto;
 mod cli;
@@ -135,4 +136,39 @@ fn list_files(path: &PathBuf) -> Vec<String> {
             })
         .map(|x| x.file_name().unwrap().to_str().unwrap().to_owned())
         .collect()
+}
+
+lazy_static! {
+    static ref RE_WITH_HYPHENS: Regex = Regex::new(r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})").unwrap();
+    static ref RE_NO_HYPHENS: Regex = Regex::new(r"^(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})").unwrap();
+}
+
+fn parse_date(text: &str) -> Option<String> {
+    // Returns the parsed date in ISO8601 format
+    RE_WITH_HYPHENS.captures(text).map(|x|
+        format!("{}-{}-{}",
+            x.name("year").unwrap().as_str().to_string(),
+            x.name("month").unwrap().as_str().to_string(),
+            x.name("day").unwrap().as_str().to_string(),
+        )
+    ).or(
+        RE_NO_HYPHENS.captures(text).map(|x|
+            format!("{}-{}-{}",
+                x.name("year").unwrap().as_str().to_string(),
+                x.name("month").unwrap().as_str().to_string(),
+                x.name("day").unwrap().as_str().to_string(),
+            )
+        )
+    )
+}
+
+#[test]
+fn test_parse_date_hyphens() {
+    assert_eq!(parse_date("2020-04-03_boop_loop"), Some("2020-04-03".to_string()))
+}
+
+
+#[test]
+fn test_parse_date_no_hyphens() {
+    assert_eq!(parse_date("20200530_boop_loop"), Some("2020-05-30".to_string()))
 }
