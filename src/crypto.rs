@@ -1,6 +1,5 @@
-use cocoon::{Cocoon, Creation};
+use cocoon::Cocoon;
 use std::fs::File;
-use rand::rngs::ThreadRng;
 use std::error::Error;
 
 

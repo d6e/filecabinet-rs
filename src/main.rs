@@ -1,21 +1,15 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 #[macro_use] extern crate rocket;
 #[macro_use] extern crate lazy_static;
-use error_chain::error_chain;
-use glob::glob;
-use itertools::chain;
 use rocket::request::Form;
-use rocket::response::content;
 use rocket::State;
-use rocket_contrib::json::{Json, JsonValue};
+use rocket_contrib::json::JsonValue;
 use rocket_contrib::templates::Template;
-use std::env;
 use std::error::Error;
 #[allow(dead_code)]
 use std::path::PathBuf;
 use std::fs::File;
 use std::io::prelude::*;
-use std::collections::HashMap;
 use rocket_contrib::serve::StaticFiles;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -194,12 +188,6 @@ fn test_parse_date_no_hyphens() {
 fn get_filestem_from_filename(filename: &str) -> Option<&str> {
     Path::new(filename)
         .file_stem()
-        .and_then(OsStr::to_str)
-}
-
-fn get_extension_from_filename(filename: &str) -> Option<&str> {
-    Path::new(filename)
-        .extension()
         .and_then(OsStr::to_str)
 }
 
