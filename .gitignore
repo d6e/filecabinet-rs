@@ -12,4 +12,5 @@ result-*
 *.pdf
 node_modules
 
-assets/*.cocoon
+# The files written
+documents

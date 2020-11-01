@@ -29,12 +29,11 @@ mod cli;
 
 #[derive(FromForm, Clone)]
 struct Document {
-    orig_name: String,
+    filename: String,
     date: String,
     institution: String,
     name: String,
     page: String,
-    extension: String
 }
 
 struct OptDoc {
@@ -42,7 +41,6 @@ struct OptDoc {
     institution: Option<String>,
     name: Option<String>,
     page: Option<String>,
-    extension: Option<String>
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -133,7 +131,7 @@ fn get_doc(config: State<cli::Config>, filename: String) -> Template {
 fn new(config: State<cli::Config>, doc: Form<Document>) -> Result<Redirect, Box<dyn Error>> {
     let file_to_write = Path::new(&config.target_directory)
         .join(format!("{}_{}_{}_{}.cocoon", doc.date, doc.institution, doc.name, doc.page));
-    let mut unencrypted = File::open(Path::new(&config.target_directory).join(&doc.orig_name))?;
+    let mut unencrypted = File::open(Path::new(&config.target_directory).join(&doc.filename))?;
     let mut buffer = Vec::new();
     unencrypted.read_to_end(&mut buffer)?;
     crypto::encrypt_file(&mut File::create(file_to_write)?, buffer)?;
@@ -188,12 +186,10 @@ fn test_parse_date_hyphens() {
     assert_eq!(parse_date("2020-04-03_boop_loop"), Some("2020-04-03".to_string()))
 }
 
-
 #[test]
 fn test_parse_date_no_hyphens() {
     assert_eq!(parse_date("20180530_boop_loop"), Some("2018-05-30".to_string()))
 }
-
 
 fn get_filestem_from_filename(filename: &str) -> Option<&str> {
     Path::new(filename)
@@ -215,6 +211,5 @@ fn to_document(filename: &str) -> OptDoc {
         institution: v.get(1).map(|x| x.to_string()),
         name: v.get(2).map(|x| x.to_string()),
         page: v.get(3).map(|x| x.to_string()),
-        extension: get_extension_from_filename(filename).map(|x| x.to_string())
     }
 }
