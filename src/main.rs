@@ -20,6 +20,7 @@ use rocket_contrib::serve::StaticFiles;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::path::Path;
+use std::ffi::OsStr;
 use rocket::response::Redirect;
 use regex::Regex;
 use std::fs;
@@ -173,4 +174,39 @@ fn test_parse_date_hyphens() {
 #[test]
 fn test_parse_date_no_hyphens() {
     assert_eq!(parse_date("20200530_boop_loop"), Some("2020-05-30".to_string()))
+}
+
+
+fn get_filestem_from_filename(filename: &str) -> Option<&str> {
+    Path::new(filename)
+        .file_stem()
+        .and_then(OsStr::to_str)
+}
+
+fn get_extension_from_filename(filename: &str) -> Option<&str> {
+    Path::new(filename)
+        .extension()
+        .and_then(OsStr::to_str)
+}
+
+fn parse_institution(filename: &str) -> Option<String> {
+    let filestem = get_filestem_from_filename(filename).unwrap_or(filename);
+    let v: Vec<&str> = filestem.split('_').collect();
+    let institution = v.get(1);
+    let doc_name: &str = v.get(2).unwrap();
+    let page_num: &str = v.get(3).unwrap();
+    return institution.map(|x| x.to_string());
+}
+
+fn to_document(filename: &str) -> Document {
+    let filestem = get_filestem_from_filename(filename).unwrap_or(filename);
+    let v: Vec<&str> = filestem.split('_').collect();
+    Document {
+        orig_name: filename.to_string(),
+        date: parse_date(&v.get(0).unwrap().to_string()).unwrap(),
+        institution: v.get(1).unwrap().to_string(),
+        name: v.get(2).unwrap().to_string(),
+        page: v.get(3).map(|x| x.to_string()).unwrap_or(String::new()).to_string(),
+        extension: get_extension_from_filename(filename).unwrap_or("").to_string()
+    }
 }
