@@ -1,25 +1,27 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 #[macro_use] extern crate rocket;
 #[macro_use] extern crate lazy_static;
+
 use rocket::request::Form;
 use rocket::State;
 use rocket_contrib::json::JsonValue;
 use rocket_contrib::templates::Template;
 use std::error::Error;
 #[allow(dead_code)]
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::prelude::*;
 use rocket_contrib::serve::StaticFiles;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use std::path::Path;
 use std::ffi::OsStr;
 use rocket::response::Redirect;
 use regex::Regex;
 use std::fs;
+
 mod crypto;
 mod cli;
+mod checksum;
 
 #[derive(FromForm, Clone)]
 struct Document {
@@ -128,7 +130,9 @@ fn new(config: State<cli::Config>, doc: Form<Document>) -> Result<Redirect, Box<
     let mut unencrypted = File::open(Path::new(&config.target_directory).join(&doc.filename))?;
     let mut buffer = Vec::new();
     unencrypted.read_to_end(&mut buffer)?;
+    let checksum_name = file_to_write.clone();
     crypto::encrypt_file(&mut File::create(file_to_write)?, buffer)?;
+    checksum::generate_sha256(checksum_name);
     Ok(Redirect::to("/"))
 }
 
