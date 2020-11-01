@@ -37,6 +37,14 @@ struct Document {
     extension: String
 }
 
+struct OptDoc {
+    date: Option<String>,
+    institution: Option<String>,
+    name: Option<String>,
+    page: Option<String>,
+    extension: Option<String>
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let config = cli::get_program_input();
     if config.launch_web {
@@ -55,9 +63,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[derive(Serialize, Debug)]
 struct Context {
   filename: String,
+  name: String,
   date: String,
+  institution: String,
   files: Vec<String>,
-  target_directory: String
+  target_directory: String,
+  page: String
 }
 
 #[get("/")]
@@ -73,37 +84,44 @@ fn get_docs(config: State<cli::Config>) -> JsonValue {
     JsonValue(serde_json::json!(docs))
 }
 
-#[get("/doc/<name>")]
-fn get_doc(config: State<cli::Config>, name: String) -> Template {
+#[get("/doc/<filename>")]
+fn get_doc(config: State<cli::Config>, filename: String) -> Template {
     let now: DateTime<Utc> = Utc::now();
     let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory));
-    if name.ends_with(".cocoon") {
+    if filename.ends_with(".cocoon") {
         // If file is encrypted, decrypt to temporary dir and return new file
-        let mut encrypted: File = File::open(Path::new(&config.target_directory).join(name.clone())).unwrap();
+        let mut encrypted: File = File::open(Path::new(&config.target_directory).join(filename.clone())).unwrap();
         let data = crypto::decrypt_file(&mut encrypted).unwrap();
-        // let mut unencrypted_path = env::temp_dir(); // TODO: maybe put temp dir under target_driectory
         let mut unencrypted_path = Path::new(&config.target_directory).join("tmp");
         if !unencrypted_path.exists() {
             fs::create_dir(unencrypted_path.clone()).unwrap();
         }
-        let unencrypted_name = name.replace("cocoon", "pdf");
+        let unencrypted_name = filename.replace("cocoon", "pdf");
         unencrypted_path.push(unencrypted_name.clone());
         let mut unecrypted: File = File::create(unencrypted_path.clone()).unwrap();
         unecrypted.write(&data).unwrap();
 
         let date = parse_date(&unencrypted_name).unwrap();
+        let doc = to_document(&unencrypted_path.to_str().unwrap());
         let new_context = Context {
             filename: unencrypted_name,
-            date: date,
+            name: doc.name.unwrap_or(String::new()),
+            date: doc.date.unwrap_or(date),
+            institution: doc.institution.unwrap_or(String::new()),
+            page: doc.page.unwrap_or(String::from("1")),
             files: files,
             target_directory: unencrypted_path.parent().unwrap().to_str().unwrap().to_owned().replace("/", "\\u{002F}")
         };
         return Template::render("index", &new_context);
     } else {
-        let date = parse_date(&name).unwrap_or(now.format("%Y-%m-%d").to_string());
+        let date = parse_date(&filename).unwrap_or(now.format("%Y-%m-%d").to_string());
+        let doc = to_document(&filename);
         let context = Context {
-            filename: name,
-            date: date,
+            filename: filename,
+            name: doc.name.unwrap_or(String::new()),
+            date: doc.date.unwrap_or(date),
+            institution: doc.institution.unwrap_or(String::new()),
+            page: doc.page.unwrap_or(String::from("1")),
             files: files,
             target_directory: config.target_directory.clone()
         };
@@ -173,7 +191,7 @@ fn test_parse_date_hyphens() {
 
 #[test]
 fn test_parse_date_no_hyphens() {
-    assert_eq!(parse_date("20200530_boop_loop"), Some("2020-05-30".to_string()))
+    assert_eq!(parse_date("20180530_boop_loop"), Some("2018-05-30".to_string()))
 }
 
 
@@ -189,24 +207,14 @@ fn get_extension_from_filename(filename: &str) -> Option<&str> {
         .and_then(OsStr::to_str)
 }
 
-fn parse_institution(filename: &str) -> Option<String> {
+fn to_document(filename: &str) -> OptDoc {
     let filestem = get_filestem_from_filename(filename).unwrap_or(filename);
     let v: Vec<&str> = filestem.split('_').collect();
-    let institution = v.get(1);
-    let doc_name: &str = v.get(2).unwrap();
-    let page_num: &str = v.get(3).unwrap();
-    return institution.map(|x| x.to_string());
-}
-
-fn to_document(filename: &str) -> Document {
-    let filestem = get_filestem_from_filename(filename).unwrap_or(filename);
-    let v: Vec<&str> = filestem.split('_').collect();
-    Document {
-        orig_name: filename.to_string(),
-        date: parse_date(&v.get(0).unwrap().to_string()).unwrap(),
-        institution: v.get(1).unwrap().to_string(),
-        name: v.get(2).unwrap().to_string(),
-        page: v.get(3).map(|x| x.to_string()).unwrap_or(String::new()).to_string(),
-        extension: get_extension_from_filename(filename).unwrap_or("").to_string()
+    OptDoc {
+        date: parse_date(&v.get(0).unwrap().to_string()),
+        institution: v.get(1).map(|x| x.to_string()),
+        name: v.get(2).map(|x| x.to_string()),
+        page: v.get(3).map(|x| x.to_string()),
+        extension: get_extension_from_filename(filename).map(|x| x.to_string())
     }
 }

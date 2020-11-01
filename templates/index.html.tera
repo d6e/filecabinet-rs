@@ -16,10 +16,10 @@
         <table>
             <tr>
             <td>
-              <label for="orig_name">Original Name:</label>
+              <label for="filename">Original Name:</label>
             </td>
             <td>
-              <input type="orig_name" id="orig_name" name="orig_name" value="{{ filename }}" readonly="readonly">
+              <input type="filename" id="filename" name="filename" value="{{ filename }}" readonly="readonly">
             </td>
           </tr>
           <tr>
@@ -36,7 +36,7 @@
               <label for="institution">Institution:</label>
             </td>
             <td>
-              <input type="text" id="institution" name="institution" required>
+              <input type="text" id="institution" name="institution" value="{{ institution }}" required>
             </td>
           </tr>
           <tr>
@@ -44,7 +44,7 @@
               <label for="name">Name:</label>
             </td>
             <td>
-              <input type="text" id="name" name="name" required>
+              <input type="text" id="name" name="name" value="{{ name }}" required>
             </td>
           </tr>
           <tr>
@@ -52,7 +52,7 @@
               <label for="page">Page:</label>
             </td>
             <td>
-              <input type="number" name="page" id="page" min="1" value="1">
+              <input type="number" name="page" id="page" value="{{ page }}" min="1" value="1">
             </td>
           </tr>
           <tr class="button">
