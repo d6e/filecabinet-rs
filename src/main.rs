@@ -85,12 +85,12 @@ fn get_doc(config: State<cli::Config>, filename: String) -> Template {
     if filename.ends_with(".cocoon") {
         // If file is encrypted, decrypt to temporary dir and return new file
         let mut encrypted: File = File::open(Path::new(&config.target_directory).join(filename.clone())).unwrap();
-        let data = crypto::decrypt_file(&mut encrypted).unwrap();
+        let data = crypto::decrypt_file(config.password.clone().unwrap(), &mut encrypted).unwrap();
         let mut unencrypted_path = Path::new(&config.target_directory).join("tmp");
         if !unencrypted_path.exists() {
             fs::create_dir(unencrypted_path.clone()).unwrap();
         }
-        let unencrypted_name = filename.replace("cocoon", "pdf");
+        let unencrypted_name = filename.replace(".cocoon", ".pdf");
         unencrypted_path.push(unencrypted_name.clone());
         let mut unecrypted: File = File::create(unencrypted_path.clone()).unwrap();
         unecrypted.write(&data).unwrap();
@@ -131,7 +131,7 @@ fn new(config: State<cli::Config>, doc: Form<Document>) -> Result<Redirect, Box<
     let mut buffer = Vec::new();
     unencrypted.read_to_end(&mut buffer)?;
     let checksum_name = file_to_write.clone();
-    crypto::encrypt_file(&mut File::create(file_to_write)?, buffer)?;
+    crypto::encrypt_file(config.password.clone().unwrap(), &mut File::create(file_to_write)?, buffer)?;
     checksum::generate_sha256(checksum_name);
     Ok(Redirect::to("/"))
 }
