@@ -6,7 +6,9 @@ pub struct Config {
     pub verbose: bool,
     pub launch_web: bool,
     pub target_directory: String,
-    pub password: Option<String>
+    pub password: Option<String>,
+    pub file_to_decrypt: Option<String>,
+    pub file_to_encrypt: Option<String>,
 }
 
 pub fn get_program_input() -> Config {
@@ -14,6 +16,8 @@ pub fn get_program_input() -> Config {
     let name_launch_web = "web";
     let name_target_directory = "target-directory";
     let name_password_file = "password-file";
+    let name_decrypt_file = "decrypt-file";
+    let name_encrypt_file = "encrypt-file";
     let default_target_directory = String::from("documents");
     let matches = App::new("filecabinet")
         .version("1.0")
@@ -47,6 +51,18 @@ pub fn get_program_input() -> Config {
                 .takes_value(true)
                 .value_name("FILE")
                 .help("File containing password for encryption."),
+        ).arg(
+            Arg::with_name(name_decrypt_file)
+                .long(name_decrypt_file)
+                .takes_value(true)
+                .value_name("FILE")
+                .help("The file to decrypt."),
+        ).arg(
+            Arg::with_name(name_encrypt_file)
+                .long(name_encrypt_file)
+                .takes_value(true)
+                .value_name("FILE")
+                .help("The file to encrypt."),
         )
         .get_matches();
     let mut password: Option<String> = None;
@@ -70,5 +86,7 @@ pub fn get_program_input() -> Config {
         target_directory: value_t!(matches, name_target_directory, String)
             .unwrap_or(default_target_directory),
         password: password,
+        file_to_decrypt: value_t!(matches, name_decrypt_file, String).ok(),
+        file_to_encrypt: value_t!(matches, name_encrypt_file, String).ok(),
     }
 }

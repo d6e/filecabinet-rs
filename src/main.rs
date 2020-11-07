@@ -41,6 +41,16 @@ struct OptDoc {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let config = cli::get_program_input();
+
+    // If there's a specific file we should decrypt, do that.
+    if let Some(path) = &config.file_to_decrypt {
+        let decrypted_path = get_decrypted_name(path);
+        let pass = config.password.clone().unwrap();
+        let mut encrypted_file = File::open(path).unwrap();
+        let data = crypto::decrypt_file(pass, &mut encrypted_file).unwrap();
+        let mut unecrypted: File = File::create(decrypted_path).unwrap();
+        unecrypted.write(&data).unwrap();
+    }
     if config.launch_web {
         rocket::ignite()
             .mount("/node_modules", StaticFiles::from("node_modules"))
@@ -52,6 +62,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             .launch();
     }
     Ok(())
+}
+
+const ENCRYPTION_FILE_EXT: &str = ".cocoon";
+
+fn get_decrypted_name<T: std::convert::AsRef<Path>>(path: T) -> PathBuf {
+    let path = path.as_ref();
+    let mut filename = path.file_name().unwrap().to_str().unwrap().to_string();
+    let basepath = path.parent().unwrap();
+    if filename.ends_with(ENCRYPTION_FILE_EXT) {
+        filename = filename.replace(ENCRYPTION_FILE_EXT, "");
+    }
+    return basepath.join(filename);
 }
 
 #[derive(Serialize, Debug)]
