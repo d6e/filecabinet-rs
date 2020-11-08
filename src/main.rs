@@ -14,6 +14,7 @@ use std::io::prelude::*;
 use rocket_contrib::serve::StaticFiles;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use std::convert::AsRef;
 use std::ffi::OsStr;
 use rocket::response::Redirect;
 use regex::Regex;
@@ -41,16 +42,27 @@ struct OptDoc {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let config = cli::get_program_input();
+    let pass = &config.password.clone().unwrap();
 
     // If there's a specific file we should decrypt, do that.
     if let Some(path) = &config.file_to_decrypt {
         let decrypted_path = get_decrypted_name(path);
-        let pass = config.password.clone().unwrap();
         let mut encrypted_file = File::open(path).unwrap();
-        let data = crypto::decrypt_file(pass, &mut encrypted_file).unwrap();
+        let data = crypto::decrypt_file(&pass, &mut encrypted_file).unwrap();
         let mut unecrypted: File = File::create(decrypted_path).unwrap();
         unecrypted.write(&data).unwrap();
     }
+
+    // If there's a specific file we should encrypt, do that too.
+    if let Some(path) = &config.file_to_encrypt {
+        let encrypted_path = get_encrypted_name(path);
+        let mut unencrypted = File::open(path)?;
+        let mut buffer = Vec::new();
+        unencrypted.read_to_end(&mut buffer)?;
+        crypto::encrypt_file(&pass, &mut File::create(encrypted_path.clone())?, buffer)?;
+        checksum::generate_sha256(encrypted_path).unwrap();
+    }
+
     if config.launch_web {
         rocket::ignite()
             .mount("/node_modules", StaticFiles::from("node_modules"))
@@ -66,12 +78,24 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 const ENCRYPTION_FILE_EXT: &str = ".cocoon";
 
-fn get_decrypted_name<T: std::convert::AsRef<Path>>(path: T) -> PathBuf {
+fn get_decrypted_name<T: AsRef<Path>>(path: T) -> PathBuf {
     let path = path.as_ref();
     let mut filename = path.file_name().unwrap().to_str().unwrap().to_string();
     let basepath = path.parent().unwrap();
+    // if it ends with the encryption extension, remove it.
     if filename.ends_with(ENCRYPTION_FILE_EXT) {
         filename = filename.replace(ENCRYPTION_FILE_EXT, "");
+    }
+    return basepath.join(filename);
+}
+
+fn get_encrypted_name<T: AsRef<Path>>(path: T) -> PathBuf {
+    let path = path.as_ref();
+    let mut filename = path.file_name().unwrap().to_str().unwrap().to_string();
+    let basepath = path.parent().unwrap();
+    // if it doesn't end with the encryption extension, add it.
+    if ! filename.ends_with(ENCRYPTION_FILE_EXT) {
+        filename.push_str(ENCRYPTION_FILE_EXT);
     }
     return basepath.join(filename);
 }
@@ -107,7 +131,8 @@ fn get_doc(config: State<cli::Config>, filename: String) -> Template {
     if filename.ends_with(".cocoon") {
         // If file is encrypted, decrypt to temporary dir and return new file
         let mut encrypted: File = File::open(Path::new(&config.target_directory).join(filename.clone())).unwrap();
-        let data = crypto::decrypt_file(config.password.clone().unwrap(), &mut encrypted).unwrap();
+        let pass = config.password.clone().unwrap();
+        let data = crypto::decrypt_file(&pass, &mut encrypted).unwrap();
         let mut unencrypted_path = Path::new(&config.target_directory).join("tmp");
         if !unencrypted_path.exists() {
             fs::create_dir(unencrypted_path.clone()).unwrap();
@@ -153,8 +178,9 @@ fn new(config: State<cli::Config>, doc: Form<Document>) -> Result<Redirect, Box<
     let mut buffer = Vec::new();
     unencrypted.read_to_end(&mut buffer)?;
     let checksum_name = file_to_write.clone();
-    crypto::encrypt_file(config.password.clone().unwrap(), &mut File::create(file_to_write)?, buffer)?;
-    checksum::generate_sha256(checksum_name);
+    let password = config.password.clone().unwrap();
+    crypto::encrypt_file(&password, &mut File::create(file_to_write)?, buffer)?;
+    checksum::generate_sha256(checksum_name).unwrap();
     Ok(Redirect::to("/"))
 }
 
