@@ -86,28 +86,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn get_decrypted_name<T: AsRef<Path>>(path: T) -> PathBuf {
-    let path = path.as_ref();
-    let mut filename = path.file_name().unwrap().to_str().unwrap().to_string();
-    let basepath = path.parent().unwrap();
-    // if it ends with the encryption extension, remove it.
-    if filename.ends_with(ENCRYPTION_FILE_EXT) {
-        filename = filename.replace(ENCRYPTION_FILE_EXT, "");
-    }
-    return basepath.join(filename);
-}
-
-fn get_encrypted_name<T: AsRef<Path>>(path: T) -> PathBuf {
-    let path = path.as_ref();
-    let mut filename = path.file_name().unwrap().to_str().unwrap().to_string();
-    let basepath = path.parent().unwrap();
-    // if it doesn't end with the encryption extension, add it.
-    if ! filename.ends_with(ENCRYPTION_FILE_EXT) {
-        filename.push_str(ENCRYPTION_FILE_EXT);
-    }
-    return basepath.join(filename);
-}
-
 #[derive(Serialize, Debug)]
 struct Context {
   filename: String,
@@ -260,4 +238,37 @@ fn to_document(filename: &str) -> OptDoc {
         name: v.get(2).map(|x| x.to_string()),
         page: v.get(3).map(|x| x.to_string()),
     }
+}
+
+#[test]
+fn test_get_decrypted_name() {
+    assert_eq!(get_decrypted_name(Path::new("/boop/loop/readme.md.cocoon")), Path::new("/boop/loop/readme.md"));
+    assert_eq!(get_decrypted_name(Path::new("readme.md.cocoon")), Path::new("readme.md"));
+}
+#[test]
+fn test_get_encrypted_name() {
+    assert_eq!(get_encrypted_name(Path::new("/boop/loop/readme.md")), Path::new("/boop/loop/readme.md.cocoon"));
+    assert_eq!(get_encrypted_name(Path::new("readme.md")), Path::new("readme.md.cocoon"));
+}
+
+fn get_decrypted_name<T: AsRef<Path>>(path: T) -> PathBuf {
+    let path = path.as_ref();
+    let mut filename = path.file_name().unwrap().to_str().unwrap().to_string();
+    let basepath = path.parent().unwrap();
+    // if it ends with the encryption extension, remove it.
+    if filename.ends_with(ENCRYPTION_FILE_EXT) {
+        filename = filename.replace(ENCRYPTION_FILE_EXT, "");
+    }
+    return basepath.join(filename);
+}
+
+fn get_encrypted_name<T: AsRef<Path>>(path: T) -> PathBuf {
+    let path = path.as_ref();
+    let mut filename = path.file_name().unwrap().to_str().unwrap().to_string();
+    let basepath = path.parent().unwrap();
+    // if it doesn't end with the encryption extension, add it.
+    if ! filename.ends_with(ENCRYPTION_FILE_EXT) {
+        filename.push_str(ENCRYPTION_FILE_EXT);
+    }
+    return basepath.join(filename);
 }
