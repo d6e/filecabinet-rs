@@ -24,6 +24,8 @@ mod crypto;
 mod cli;
 mod checksum;
 
+const ENCRYPTION_FILE_EXT: &str = ".cocoon";
+
 #[derive(FromForm, Clone)]
 struct Document {
     filename: String,
@@ -46,21 +48,29 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // If there's a specific file we should decrypt, do that.
     if let Some(path) = &config.file_to_decrypt {
-        let decrypted_path = get_decrypted_name(path);
-        let mut encrypted_file = File::open(path).unwrap();
-        let data = crypto::decrypt_file(&pass, &mut encrypted_file).unwrap();
-        let mut unecrypted: File = File::create(decrypted_path).unwrap();
-        unecrypted.write(&data).unwrap();
+        if path.ends_with(ENCRYPTION_FILE_EXT) {
+            let decrypted_path = get_decrypted_name(path);
+            let mut encrypted_file = File::open(path).unwrap();
+            let data = crypto::decrypt_file(&pass, &mut encrypted_file).unwrap();
+            let mut unecrypted: File = File::create(decrypted_path).unwrap();
+            unecrypted.write(&data).unwrap();
+        } else {
+            println!("Error: '{}' is not encrypted.", path);
+        }
     }
 
     // If there's a specific file we should encrypt, do that too.
     if let Some(path) = &config.file_to_encrypt {
-        let encrypted_path = get_encrypted_name(path);
-        let mut unencrypted = File::open(path)?;
-        let mut buffer = Vec::new();
-        unencrypted.read_to_end(&mut buffer)?;
-        crypto::encrypt_file(&pass, &mut File::create(encrypted_path.clone())?, buffer)?;
-        checksum::generate_sha256(encrypted_path).unwrap();
+        if ! path.ends_with(ENCRYPTION_FILE_EXT) {
+            let encrypted_path = get_encrypted_name(path);
+            let mut unencrypted = File::open(path)?;
+            let mut buffer = Vec::new();
+            unencrypted.read_to_end(&mut buffer)?;
+            crypto::encrypt_file(&pass, &mut File::create(encrypted_path.clone())?, buffer)?;
+            checksum::generate_sha256(encrypted_path).unwrap();
+        } else {
+            println!("Error: '{}' is already encrypted.", path);
+        }
     }
 
     if config.launch_web {
@@ -75,8 +85,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     Ok(())
 }
-
-const ENCRYPTION_FILE_EXT: &str = ".cocoon";
 
 fn get_decrypted_name<T: AsRef<Path>>(path: T) -> PathBuf {
     let path = path.as_ref();
