@@ -1,0 +1,3 @@
+* [ ] Encrypted files can become corrupted if cancelled halfway. Mitigate this somehow... 
+   - Create temp file and move.
+   - Validate checksums.

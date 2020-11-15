@@ -52,10 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         included.par_iter().map(|path| {
             match crypto::decrypt_file(path, pass) {
                 Err(s) => pb.println(format!("ERROR {}", s)),
-                Ok(_) => {
-                    pb.println(format!("Decrypted {}", path));
-                    checksum::generate_sha256(Path::new(path).to_path_buf()).unwrap();
-                }
+                Ok(_) => pb.println(format!("Decrypted {}", path))
             }
             pb.inc(1);
         }).collect::<Vec<_>>();
