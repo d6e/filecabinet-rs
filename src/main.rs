@@ -60,7 +60,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             pb.inc(1);
         }).collect::<Vec<_>>();
         pb.finish();
-        let bullet_pt = "\n    * ";
+        let bullet_pt = "\n    ";
         println!("Successfully decrypted files:{}{}", bullet_pt, included.join(bullet_pt));
         println!("Ignored:{}{}", bullet_pt, excluded.join(bullet_pt));
     }
@@ -83,7 +83,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             pb.inc(1);
         }).collect::<Vec<_>>();
         pb.finish();
-        let bullet_pt = "\n    * ";
+        let bullet_pt = "\n    ";
         println!("Successfully encrypted files:{}{}", bullet_pt, included.join(bullet_pt));
         println!("Ignored:{}{}", bullet_pt, excluded.join(bullet_pt));
     }
