@@ -4,7 +4,6 @@ use std::error::Error;
 use std::convert::AsRef;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
-use std::env;
 
 pub const ENCRYPTION_FILE_EXT: &str = ".cocoon";
 
@@ -83,7 +82,7 @@ fn test_get_encrypted_name() {
 #[test]
 fn test_encrypt_decrypt_file() {
     // Create temporary test dir.
-    let mut tempdir = env::temp_dir();
+    let mut tempdir = std::env::temp_dir();
     tempdir.push("sdfasfd");
     std::fs::create_dir_all(&tempdir).unwrap();
     let data = b"hello world";
@@ -94,8 +93,6 @@ fn test_encrypt_decrypt_file() {
     let mut f: File = File::create(&clear_text).unwrap();
     f.write_all(data).unwrap();
     drop(f);
-
-    println!("{:?}", tempdir);
 
     // Encrypt it.
     encrypt_file(clear_text.to_str().unwrap(), "password").unwrap();

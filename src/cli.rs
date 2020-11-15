@@ -1,4 +1,4 @@
-use clap::{value_t, App, Arg};
+use clap::{value_t,values_t, App, Arg};
 use std::fs::File;
 use std::io::prelude::*;
 
@@ -8,7 +8,7 @@ pub struct Config {
     pub target_directory: String,
     pub password: Option<String>,
     pub file_to_decrypt: Option<String>,
-    pub file_to_encrypt: Option<String>,
+    pub file_to_encrypt: Option<Vec<String>>,
 }
 
 pub fn get_program_input() -> Config {
@@ -55,12 +55,14 @@ pub fn get_program_input() -> Config {
             Arg::with_name(name_decrypt_file)
                 .long(name_decrypt_file)
                 .takes_value(true)
+                .multiple(true)
                 .value_name("FILE")
                 .help("The file to decrypt."),
         ).arg(
             Arg::with_name(name_encrypt_file)
                 .long(name_encrypt_file)
                 .takes_value(true)
+                .multiple(true)
                 .value_name("FILE")
                 .help("The file to encrypt."),
         )
@@ -87,6 +89,7 @@ pub fn get_program_input() -> Config {
             .unwrap_or(default_target_directory),
         password: password,
         file_to_decrypt: value_t!(matches, name_decrypt_file, String).ok(),
-        file_to_encrypt: value_t!(matches, name_encrypt_file, String).ok(),
+        //file_to_encrypt: value_t!(matches, name_encrypt_file, String).ok(),
+        file_to_encrypt: values_t!(matches.values_of(name_encrypt_file), String).ok()
     }
 }

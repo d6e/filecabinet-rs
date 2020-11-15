@@ -19,6 +19,11 @@ use rocket::response::Redirect;
 use regex::Regex;
 use rocket::response::{Response, Responder};
 use std::fs;
+use indicatif::ProgressBar;
+use glob::glob;
+use indicatif::{ParallelProgressIterator, MultiProgress, ProgressStyle};
+use rayon::iter::{ParallelIterator, IntoParallelRefIterator};
+use std::thread;
 
 mod crypto;
 mod cli;
@@ -40,6 +45,10 @@ struct OptDoc {
     page: Option<String>,
 }
 
+fn exclude_files(p: &str) -> bool {
+    p.ends_with(crypto::ENCRYPTION_FILE_EXT) || p.ends_with(".sha256")
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let config = cli::get_program_input();
     let pass = &config.password.clone().unwrap();
@@ -52,11 +61,26 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // If there's a specific file we should encrypt, do that too.
-    if let Some(path) = &config.file_to_encrypt {
-        match crypto::encrypt_file(path, pass) {
-            Err(s) => println!("{}", s),
-            Ok(_) => checksum::generate_sha256(Path::new(path).to_path_buf()).unwrap()
-        }
+    if let Some(paths) = &config.file_to_encrypt {
+        let included: Vec<String> = paths.iter().filter(|p| {! exclude_files(p)} ).map(String::to_string).collect();
+        let excluded: Vec<String> = paths.iter().filter(|p| exclude_files(p)).map(String::to_string).collect();
+        let pb = ProgressBar::new(included.len() as u64);
+        pb.set_position(0); // Start drawing progress bar
+        included.par_iter().map(|path| {
+            match crypto::encrypt_file(path, pass) {
+                Err(s) => pb.println(format!("ERROR {}", s)),
+                Ok(_) => {
+                    pb.println(format!("Encrypted {}", path));
+                    checksum::generate_sha256(Path::new(path).to_path_buf()).unwrap();
+                }
+            }
+            pb.inc(1);
+        }).collect::<Vec<_>>();
+        pb.finish();
+        let bullet_pt = "\n    * ";
+        println!("Successfully encrypted files:{}{}", bullet_pt, included.join(bullet_pt));
+        println!("Ignored:{}{}", bullet_pt, excluded.join(bullet_pt));
+        std::process::exit(0);
     }
 
     if config.launch_web {
