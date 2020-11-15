@@ -1,9 +1,9 @@
 use cocoon::Cocoon;
 use std::fs::File;
-use std::error::Error;
 use std::convert::AsRef;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
+use atomicwrites::{AtomicFile, AllowOverwrite};
 
 pub const ENCRYPTION_FILE_EXT: &str = ".cocoon";
 
@@ -13,8 +13,8 @@ pub fn decrypt_file(path: &str, password: &str) -> Result<(), String> {
         let mut encrypted_file = File::open(path).unwrap();
         let data = cocoon.parse(&mut encrypted_file).expect(&format!("Unable to decrypt {}", path));
         let decrypted_path = get_decrypted_name(path);
-        let mut unecrypted: File = File::create(decrypted_path).unwrap();
-        unecrypted.write(&data).unwrap();
+        let unencrypted = AtomicFile::new(decrypted_path, AllowOverwrite);
+        unencrypted.write(|f| {f.write_all(&data)}).unwrap();
         return Ok(());
     } else {
         return Err(format!("Error: '{}' is not encrypted.", path));
@@ -28,8 +28,10 @@ pub fn encrypt_file(path: &str, password: &str) -> Result<(), String> {
         let mut unencrypted = File::open(path).unwrap();
         let mut buffer = Vec::new();
         unencrypted.read_to_end(&mut buffer).unwrap();
-        let encrypted_file = &mut File::create(encrypted_path.clone()).unwrap();
-        cocoon.dump(buffer, encrypted_file).unwrap();
+        let encrypted_file = AtomicFile::new(encrypted_path.clone(), AllowOverwrite);
+        encrypted_file.write(|f| {
+            cocoon.dump(buffer, f)
+        }).unwrap();
         return Ok(());
     } else {
         return Err(format!("Error: '{}' is already encrypted.", path));
