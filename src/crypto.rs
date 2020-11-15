@@ -7,23 +7,12 @@ use std::path::{Path, PathBuf};
 
 pub const ENCRYPTION_FILE_EXT: &str = ".cocoon";
 
-fn encrypt(password: &str, file: &mut File, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
-    let cocoon = Cocoon::new(password.as_bytes());
-    cocoon.dump(data, file).unwrap();
-    Ok(())
-}
-
-fn decrypt(password: &str, file: &mut File) -> Result<Vec<u8>, Box<dyn Error>> {
-    let cocoon = Cocoon::new(password.as_bytes());
-    let data = cocoon.parse(file);
-    Ok(data.unwrap())
-}
-
 pub fn decrypt_file(path: &str, password: &str) -> Result<(), String> {
     if path.ends_with(ENCRYPTION_FILE_EXT) {
-        let decrypted_path = get_decrypted_name(path);
+        let cocoon = Cocoon::new(password.as_bytes());
         let mut encrypted_file = File::open(path).unwrap();
-        let data = decrypt(password, &mut encrypted_file).unwrap();
+        let data = cocoon.parse(&mut encrypted_file).expect(&format!("Unable to decrypt {}", path));
+        let decrypted_path = get_decrypted_name(path);
         let mut unecrypted: File = File::create(decrypted_path).unwrap();
         unecrypted.write(&data).unwrap();
         return Ok(());
@@ -34,12 +23,13 @@ pub fn decrypt_file(path: &str, password: &str) -> Result<(), String> {
 
 pub fn encrypt_file(path: &str, password: &str) -> Result<(), String> {
     if ! path.ends_with(ENCRYPTION_FILE_EXT) {
+        let cocoon = Cocoon::new(password.as_bytes());
         let encrypted_path = get_encrypted_name(path);
         let mut unencrypted = File::open(path).unwrap();
         let mut buffer = Vec::new();
         unencrypted.read_to_end(&mut buffer).unwrap();
         let encrypted_file = &mut File::create(encrypted_path.clone()).unwrap();
-        encrypt(password, encrypted_file, buffer).unwrap();
+        cocoon.dump(buffer, encrypted_file).unwrap();
         return Ok(());
     } else {
         return Err(format!("Error: '{}' is already encrypted.", path));

@@ -7,7 +7,7 @@ pub struct Config {
     pub launch_web: bool,
     pub target_directory: String,
     pub password: Option<String>,
-    pub file_to_decrypt: Option<String>,
+    pub file_to_decrypt: Option<Vec<String>>,
     pub file_to_encrypt: Option<Vec<String>>,
 }
 
@@ -88,8 +88,7 @@ pub fn get_program_input() -> Config {
         target_directory: value_t!(matches, name_target_directory, String)
             .unwrap_or(default_target_directory),
         password: password,
-        file_to_decrypt: value_t!(matches, name_decrypt_file, String).ok(),
-        //file_to_encrypt: value_t!(matches, name_encrypt_file, String).ok(),
+        file_to_decrypt: values_t!(matches.values_of(name_decrypt_file), String).ok(),
         file_to_encrypt: values_t!(matches.values_of(name_encrypt_file), String).ok()
     }
 }

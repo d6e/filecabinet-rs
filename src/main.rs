@@ -9,21 +9,15 @@ use rocket_contrib::templates::Template;
 use std::error::Error;
 #[allow(dead_code)]
 use std::path::{Path, PathBuf};
-use std::fs::File;
-use std::io::prelude::*;
+
 use rocket_contrib::serve::StaticFiles;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::ffi::OsStr;
 use rocket::response::Redirect;
 use regex::Regex;
-use rocket::response::{Response, Responder};
-use std::fs;
 use indicatif::ProgressBar;
-use glob::glob;
-use indicatif::{ParallelProgressIterator, MultiProgress, ProgressStyle};
 use rayon::iter::{ParallelIterator, IntoParallelRefIterator};
-use std::thread;
 
 mod crypto;
 mod cli;
@@ -45,23 +39,35 @@ struct OptDoc {
     page: Option<String>,
 }
 
-fn exclude_files(p: &str) -> bool {
-    p.ends_with(crypto::ENCRYPTION_FILE_EXT) || p.ends_with(".sha256")
-}
-
 fn main() -> Result<(), Box<dyn Error>> {
     let config = cli::get_program_input();
     let pass = &config.password.clone().unwrap();
 
     // If there's a specific file we should decrypt, do that.
-    if let Some(path) = &config.file_to_decrypt {
-        if let Err(s) = crypto::decrypt_file(path, pass) {
-            println!("{}", s);
-        }
+    if let Some(paths) = &config.file_to_decrypt {
+        let included: Vec<String> = paths.iter().filter(|p| p.ends_with(crypto::ENCRYPTION_FILE_EXT)).map(String::to_string).collect();
+        let excluded: Vec<String> = paths.iter().filter(|p| {! p.ends_with(crypto::ENCRYPTION_FILE_EXT)}).map(String::to_string).collect();
+        let pb = ProgressBar::new(included.len() as u64);
+        pb.set_position(0); // Start drawing progress bar
+        included.par_iter().map(|path| {
+            match crypto::decrypt_file(path, pass) {
+                Err(s) => pb.println(format!("ERROR {}", s)),
+                Ok(_) => {
+                    pb.println(format!("Decrypted {}", path));
+                    checksum::generate_sha256(Path::new(path).to_path_buf()).unwrap();
+                }
+            }
+            pb.inc(1);
+        }).collect::<Vec<_>>();
+        pb.finish();
+        let bullet_pt = "\n    * ";
+        println!("Successfully decrypted files:{}{}", bullet_pt, included.join(bullet_pt));
+        println!("Ignored:{}{}", bullet_pt, excluded.join(bullet_pt));
     }
 
     // If there's a specific file we should encrypt, do that too.
     if let Some(paths) = &config.file_to_encrypt {
+        let exclude_files = |p: &str| { p.ends_with(crypto::ENCRYPTION_FILE_EXT) || p.ends_with(".sha256")};
         let included: Vec<String> = paths.iter().filter(|p| {! exclude_files(p)} ).map(String::to_string).collect();
         let excluded: Vec<String> = paths.iter().filter(|p| exclude_files(p)).map(String::to_string).collect();
         let pb = ProgressBar::new(included.len() as u64);
@@ -80,7 +86,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         let bullet_pt = "\n    * ";
         println!("Successfully encrypted files:{}{}", bullet_pt, included.join(bullet_pt));
         println!("Ignored:{}{}", bullet_pt, excluded.join(bullet_pt));
-        std::process::exit(0);
     }
 
     if config.launch_web {
