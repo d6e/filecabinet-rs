@@ -49,7 +49,6 @@ pub fn get_program_input() -> Config {
             Arg::with_name(name_password_file)
                 .short("p")
                 .long(name_password_file)
-                .required(true)
                 .takes_value(true)
                 .value_name("FILE")
                 .help("File containing password for encryption."),
@@ -74,22 +73,22 @@ pub fn get_program_input() -> Config {
                 .help("Verify the file integrity of all files."),
         )
         .get_matches();
+
+    // Read password file
     let mut password: Option<String> = None;
-    if ! matches.is_present(name_password_file) {
-        println!("ERROR: {} is required.", name_password_file);
-        std::process::exit(1);
-    } else {
+    if matches.is_present(name_password_file) {
         let password_file: String = value_t!(matches, name_password_file, String).unwrap();
         let mut file = File::open(&password_file).expect(&format!("Couldn't open '{}'", &password_file));
         let mut buffer = String::new();
         file.read_to_string(&mut buffer).unwrap();
-        if buffer.len() > 0 {
+        if buffer.trim().len() > 0 {
             password = Some(buffer.trim().to_string());
         } else {
-            println!("ERROR: password file {} is empty!", password_file);
+            eprintln!("ERROR: password file {} is empty!", password_file);
         }
     }
-    Config {
+
+    let config = Config {
         verbose: matches.is_present(name_verbose),
         launch_web: matches.is_present(name_launch_web),
         target_directory: value_t!(matches, name_target_directory, String)
@@ -98,5 +97,12 @@ pub fn get_program_input() -> Config {
         file_to_decrypt: values_t!(matches.values_of(name_decrypt_file), String).ok(),
         file_to_encrypt: values_t!(matches.values_of(name_encrypt_file), String).ok(),
         verify: matches.is_present(name_verify),
+    };
+
+    // Validate times the password must be specified
+    if config.password.is_none() && (config.file_to_decrypt.is_some() || config.file_to_encrypt.is_some() || config.launch_web) {
+        eprintln!("ERROR The password was not specified.");
+        std::process::exit(1);
     }
+    return config;
 }

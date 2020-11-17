@@ -41,8 +41,6 @@ struct OptDoc {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let config = cli::get_program_input();
-    let pass = &config.password.clone().unwrap();
-
     if config.verify {
         let checksums: Vec<String> = Path::new(&config.target_directory)
             .read_dir()
@@ -72,8 +70,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("--------------------");
         println!("Successes: {}", successes);
         println!("Failures: {}", failures);
+        std::process::exit(0);
     }
 
+    let pass = &config.password.clone().unwrap();
     // If there's a specific file we should decrypt, do that.
     if let Some(paths) = &config.file_to_decrypt {
         let included: Vec<String> = paths.iter().filter(|p| p.ends_with(crypto::ENCRYPTION_FILE_EXT)).map(String::to_string).collect();
@@ -91,6 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let bullet_pt = "\n    ";
         println!("Successfully decrypted files:{}{}", bullet_pt, included.join(bullet_pt));
         println!("Ignored:{}{}", bullet_pt, excluded.join(bullet_pt));
+        std::process::exit(0);
     }
 
     // If there's a specific file we should encrypt, do that too.
@@ -114,6 +115,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let bullet_pt = "\n    ";
         println!("Successfully encrypted files:{}{}", bullet_pt, included.join(bullet_pt));
         println!("Ignored:{}{}", bullet_pt, excluded.join(bullet_pt));
+        std::process::exit(0);
     }
 
     if config.launch_web {
