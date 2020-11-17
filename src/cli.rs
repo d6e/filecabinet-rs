@@ -9,6 +9,7 @@ pub struct Config {
     pub password: Option<String>,
     pub file_to_decrypt: Option<Vec<String>>,
     pub file_to_encrypt: Option<Vec<String>>,
+    pub verify: bool,
 }
 
 pub fn get_program_input() -> Config {
@@ -18,7 +19,8 @@ pub fn get_program_input() -> Config {
     let name_password_file = "password-file";
     let name_decrypt_file = "decrypt-file";
     let name_encrypt_file = "encrypt-file";
-    let default_target_directory = String::from("documents");
+    let name_verify = "verify";
+    let default_target_directory = String::from(".");
     let matches = App::new("filecabinet")
         .version("1.0")
         .author("Danielle <filecabinet@d6e.io>")
@@ -66,6 +68,11 @@ pub fn get_program_input() -> Config {
                 .value_name("FILE")
                 .help("The file to encrypt."),
         )
+        .arg(
+            Arg::with_name(name_verify)
+                .long(name_verify)
+                .help("Verify the file integrity of all files."),
+        )
         .get_matches();
     let mut password: Option<String> = None;
     if ! matches.is_present(name_password_file) {
@@ -73,7 +80,7 @@ pub fn get_program_input() -> Config {
         std::process::exit(1);
     } else {
         let password_file: String = value_t!(matches, name_password_file, String).unwrap();
-        let mut file = File::open(&password_file).unwrap();
+        let mut file = File::open(&password_file).expect(&format!("Couldn't open '{}'", &password_file));
         let mut buffer = String::new();
         file.read_to_string(&mut buffer).unwrap();
         if buffer.len() > 0 {
@@ -89,6 +96,7 @@ pub fn get_program_input() -> Config {
             .unwrap_or(default_target_directory),
         password: password,
         file_to_decrypt: values_t!(matches.values_of(name_decrypt_file), String).ok(),
-        file_to_encrypt: values_t!(matches.values_of(name_encrypt_file), String).ok()
+        file_to_encrypt: values_t!(matches.values_of(name_encrypt_file), String).ok(),
+        verify: matches.is_present(name_verify),
     }
 }

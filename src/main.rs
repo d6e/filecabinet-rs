@@ -43,6 +43,37 @@ fn main() -> Result<(), Box<dyn Error>> {
     let config = cli::get_program_input();
     let pass = &config.password.clone().unwrap();
 
+    if config.verify {
+        let checksums: Vec<String> = Path::new(&config.target_directory)
+            .read_dir()
+            .expect("read_dir call failed")
+            .map(|x| x.unwrap().path())
+            .filter(|x| Path::new(x).is_file())
+            .filter(|x| {
+                    x.extension().unwrap_or(OsStr::new("")) == "sha256"
+                })
+            .map(|x| x.file_name().unwrap().to_str().unwrap().to_owned())
+            .collect();
+        let results: Vec<bool> = checksums.iter().map( |c| {
+            let mut p = PathBuf::new();
+            p.push(&config.target_directory);
+            p.push(c);
+            print!("Validating \"{}\"... ", p.to_str().unwrap());
+            let is_valid = checksum::validate_sha256(p).unwrap();
+            println!("{}", if is_valid {"OK"} else {"FAILED"});
+            is_valid
+        }).collect();
+        let successes = results.iter()
+            .filter(|is_valid| **is_valid)
+            .count();
+        let failures = results.iter()
+            .filter(|is_valid| !*is_valid)
+            .count();
+        println!("--------------------");
+        println!("Successes: {}", successes);
+        println!("Failures: {}", failures);
+    }
+
     // If there's a specific file we should decrypt, do that.
     if let Some(paths) = &config.file_to_decrypt {
         let included: Vec<String> = paths.iter().filter(|p| p.ends_with(crypto::ENCRYPTION_FILE_EXT)).map(String::to_string).collect();
