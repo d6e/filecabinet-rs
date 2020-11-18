@@ -36,6 +36,7 @@ pub fn get_program_input() -> Config {
             Arg::with_name(name_launch_web)
                 .short("w")
                 .long(name_launch_web)
+                .requires(name_password_file)
                 .help("Launches the web server."),
         )
         .arg(
@@ -56,6 +57,7 @@ pub fn get_program_input() -> Config {
         ).arg(
             Arg::with_name(name_decrypt_file)
                 .long(name_decrypt_file)
+                .requires(name_password_file)
                 .takes_value(true)
                 .multiple(true)
                 .value_name("FILE")
@@ -63,6 +65,7 @@ pub fn get_program_input() -> Config {
         ).arg(
             Arg::with_name(name_encrypt_file)
                 .long(name_encrypt_file)
+                .requires(name_password_file)
                 .takes_value(true)
                 .multiple(true)
                 .value_name("FILE")
