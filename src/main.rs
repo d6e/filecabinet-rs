@@ -42,33 +42,55 @@ struct OptDoc {
 fn main() -> Result<(), Box<dyn Error>> {
     let config = cli::get_program_input();
     if config.verify {
-        let checksums: Vec<String> = Path::new(&config.target_directory)
+        let files: Vec<PathBuf> = Path::new(&config.target_directory)
             .read_dir()
             .expect("read_dir call failed")
             .map(|x| x.unwrap().path())
             .filter(|x| Path::new(x).is_file())
+            .collect();
+
+        let not_checksum_files: Vec<&PathBuf> = files.iter()
+            .filter(|x| {
+                    x.extension().unwrap_or(OsStr::new("")) != "sha256"
+            })
+            .collect();
+
+        let checksum_files: Vec<&PathBuf> = files.iter()
             .filter(|x| {
                     x.extension().unwrap_or(OsStr::new("")) == "sha256"
-                })
-            .map(|x| x.file_name().unwrap().to_str().unwrap().to_owned())
+            })
             .collect();
-        let results: Vec<bool> = checksums.par_iter().map( |c| {
-            let mut p = PathBuf::new();
-            p.push(&config.target_directory);
-            p.push(c);
-            let is_valid = checksum::validate_sha256(&p).unwrap();
-            println!("Validating \"{}\"... {}", p.to_str().unwrap(), if is_valid {"OK"} else {"FAILED"});
+
+        let missing_checksum: Vec<String> = not_checksum_files.iter()
+            .filter(|path| {
+                // Check if corresponding checksum is available.
+                let mut p: PathBuf = (**path).to_owned();
+                let mut ext = p.extension().unwrap_or(OsStr::new("")).to_owned();
+                ext.push(".sha256");
+                p.set_extension(ext);
+                ! checksum_files.contains(&&p)
+            })
+            .map(|p| p.to_str().unwrap().to_owned())
+            .collect();
+
+        let results: Vec<bool> = checksum_files.par_iter().map( |c| {
+            let is_valid = checksum::validate_sha256(c).unwrap();
+            println!("Validating \"{}\"... {}", c.to_str().unwrap(), if is_valid {"OK"} else {"FAILED"});
             is_valid
         }).collect();
+
         let successes = results.iter()
             .filter(|is_valid| **is_valid)
             .count();
+
         let failures = results.iter()
             .filter(|is_valid| !*is_valid)
             .count();
+
         println!("--------------------");
         println!("Successes: {}", successes);
         println!("Failures: {}", failures);
+        println!("Missing checksums: {}", missing_checksum.join("\n    "));
         std::process::exit(0);
     }
 

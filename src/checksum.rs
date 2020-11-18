@@ -44,6 +44,7 @@ fn make_digest(input: File) -> String {
 }
 
 pub fn validate_sha256(path: &PathBuf) -> Result<bool, Box<dyn std::error::Error>> {
+    println!("path={:?}", path);
     let mut f = File::open(&path).unwrap();
     let mut buffer: Vec<u8> = Vec::new();
     f.read_to_end(&mut buffer).unwrap();
