@@ -41,6 +41,7 @@ pub fn get_program_input() -> Config {
         .arg(
             Arg::with_name(name_target_directory)
                 .short("d")
+                .default_value(&default_target_directory)
                 .long(name_target_directory)
                 .takes_value(true)
                 .value_name("DIR")
@@ -91,8 +92,7 @@ pub fn get_program_input() -> Config {
     let config = Config {
         verbose: matches.is_present(name_verbose),
         launch_web: matches.is_present(name_launch_web),
-        target_directory: value_t!(matches, name_target_directory, String)
-            .unwrap_or(default_target_directory),
+        target_directory: value_t!(matches, name_target_directory, String).unwrap(),
         password: password,
         file_to_decrypt: values_t!(matches.values_of(name_decrypt_file), String).ok(),
         file_to_encrypt: values_t!(matches.values_of(name_encrypt_file), String).ok(),
