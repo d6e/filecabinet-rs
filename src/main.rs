@@ -52,13 +52,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 })
             .map(|x| x.file_name().unwrap().to_str().unwrap().to_owned())
             .collect();
-        let results: Vec<bool> = checksums.iter().map( |c| {
+        let results: Vec<bool> = checksums.par_iter().map( |c| {
             let mut p = PathBuf::new();
             p.push(&config.target_directory);
             p.push(c);
-            print!("Validating \"{}\"... ", p.to_str().unwrap());
-            let is_valid = checksum::validate_sha256(p).unwrap();
-            println!("{}", if is_valid {"OK"} else {"FAILED"});
+            let is_valid = checksum::validate_sha256(&p).unwrap();
+            println!("Validating \"{}\"... {}", p.to_str().unwrap(), if is_valid {"OK"} else {"FAILED"});
             is_valid
         }).collect();
         let successes = results.iter()
