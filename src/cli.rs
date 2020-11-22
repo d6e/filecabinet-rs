@@ -92,10 +92,18 @@ pub fn get_program_input() -> Config {
         }
     }
 
+    // Remove trailing slashes
+    let mut target_dir = value_t!(matches, name_target_directory, String).unwrap();
+    if target_dir.ends_with("/") || target_dir.ends_with("\\") {
+        let len = target_dir.len();
+        target_dir.truncate(len - 1);
+    }
+
+    // Build config
     let config = Config {
         verbose: matches.is_present(name_verbose),
         launch_web: matches.is_present(name_launch_web),
-        target_directory: value_t!(matches, name_target_directory, String).unwrap(),
+        target_directory: target_dir,
         password: password,
         file_to_decrypt: values_t!(matches.values_of(name_decrypt_file), String).ok(),
         file_to_encrypt: values_t!(matches.values_of(name_encrypt_file), String).ok(),
