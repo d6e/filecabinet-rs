@@ -73,11 +73,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             .map(|p| p.to_str().unwrap().to_owned())
             .collect();
 
-        let results: Vec<bool> = checksum_files.par_iter().map( |c| {
-            let is_valid = checksum::validate_sha256(c).unwrap();
-            println!("Validating \"{}\"... {}", c.to_str().unwrap(), if is_valid {"OK"} else {"FAILED"});
-            is_valid
-        }).collect();
+        let results: Vec<bool> = checksum_files.par_iter()
+            .map( |c| {
+                let is_valid = checksum::validate_sha256(c).unwrap();
+                println!("Validating \"{}\"... {}", c.to_str().unwrap(), if is_valid {"OK"} else {"FAILED"});
+                is_valid
+            })
+            .collect();
 
         let successes = results.iter()
             .filter(|is_valid| **is_valid)
@@ -239,7 +241,7 @@ fn list_files(path: &PathBuf) -> Vec<String> {
         .map(|x| x.unwrap().path())
         .filter(|x| Path::new(x).is_file())
         .filter(|x| {
-                let ext = x.extension().unwrap();
+                let ext = x.extension().unwrap_or(OsStr::new(""));
                 ext == "pdf" ||
                 ext == "jpg" ||
                 ext == "png" ||
