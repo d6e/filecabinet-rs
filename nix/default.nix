@@ -15,7 +15,7 @@ in
 
   # provided by shell.nix
   devTools = {
-    inherit (pkgs) niv pre-commit;
+    inherit (pkgs) niv;
   };
 
   # to be built by github actions
@@ -23,13 +23,6 @@ in
     pre-commit-check = (import sources."pre-commit-hooks.nix").run {
       inherit src;
       hooks = {
-        shellcheck.enable = true;
-        nixpkgs-fmt.enable = true;
-        nix-linter.enable = true;
-        rustfmt.enable = false;
-        clippy.enable = false;
-        cargo-check.enable = true;
-        yamllint.enable = false;
       };
       # generated files
       excludes = [ "^nix/sources\.nix$" ];
