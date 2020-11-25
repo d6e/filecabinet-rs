@@ -21,24 +21,22 @@ pub fn decrypt_file(path: &str, password: &str) -> Result<(), String> {
     }
 }
 
-pub fn encrypt_file(path: &str, password: &str) -> Result<(), String> {
-    if ! path.ends_with(ENCRYPTION_FILE_EXT) {
-        let cocoon = Cocoon::new(password.as_bytes());
-        let encrypted_path = get_encrypted_name(path);
-        let mut unencrypted = File::open(path).unwrap();
-        let mut buffer = Vec::new();
-        unencrypted.read_to_end(&mut buffer).unwrap();
-        let encrypted_file = AtomicFile::new(encrypted_path.clone(), AllowOverwrite);
-        encrypted_file.write(|f| {
-            cocoon.dump(buffer, f)
-        }).unwrap();
-        return Ok(());
-    } else {
-        return Err(format!("Error: '{}' is already encrypted.", path));
-    }
+pub fn encrypt_file<A: AsRef<Path>, B: AsRef<Path>>(source: A, target: B, password: &str) -> Result<(), String> {
+    let source = source.as_ref();
+    let target = target.as_ref();
+    let cocoon = Cocoon::new(password.as_bytes());
+    let encrypted_path = target;
+    let mut unencrypted = File::open(source).expect(&format!("Cannot open {}", source.to_string_lossy()));
+    let mut buffer = Vec::new();
+    unencrypted.read_to_end(&mut buffer).unwrap();
+    let encrypted_file = AtomicFile::new(encrypted_path, AllowOverwrite);
+    encrypted_file.write(|f| {
+        cocoon.dump(buffer, f)
+    }).unwrap();
+    return Ok(());
 }
 
-pub fn get_decrypted_name<T: AsRef<Path>>(path: T) -> PathBuf {
+pub fn get_decrypted_name<P: AsRef<Path>>(path: P) -> PathBuf {
     let path = path.as_ref();
     let mut filename = path.file_name().unwrap().to_str().unwrap().to_string();
     let basepath = path.parent().unwrap();
@@ -49,7 +47,8 @@ pub fn get_decrypted_name<T: AsRef<Path>>(path: T) -> PathBuf {
     return basepath.join(filename);
 }
 
-pub fn get_encrypted_name<T: AsRef<Path>>(path: T) -> PathBuf {
+// Appends `.cocoon` on the end of the filepath
+pub fn get_encrypted_name<P: AsRef<Path>>(path: P) -> PathBuf {
     let path = path.as_ref();
     let mut filename = path.file_name().unwrap().to_str().unwrap().to_string();
     let basepath = path.parent().unwrap();
@@ -87,7 +86,8 @@ fn test_encrypt_decrypt_file() {
     drop(f);
 
     // Encrypt it.
-    encrypt_file(clear_text.to_str().unwrap(), "password").unwrap();
+    let target = get_encrypted_name(clear_text);
+    encrypt_file(clear_text, target, "password").unwrap();
 
     // Delete old file.
     std::fs::remove_file(&clear_text).unwrap();

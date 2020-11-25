@@ -30,6 +30,7 @@ struct Document {
     institution: String,
     name: String,
     page: String,
+    encrypt_it: bool,
 }
 
 struct OptDoc {
@@ -125,7 +126,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         let pb = ProgressBar::new(included.len() as u64);
         pb.set_position(0); // Start drawing progress bar
         included.par_iter().map(|path| {
-            match crypto::encrypt_file(path, pass) {
+            let target = crypto::get_encrypted_name(path);
+            match crypto::encrypt_file(path, target, pass) {
                 Err(s) => pb.println(format!("ERROR {}", s)),
                 Ok(_) => {
                     pb.println(format!("Encrypted {}", path));
@@ -227,7 +229,9 @@ fn new(config: State<cli::Config>, doc: Form<Document>) -> Result<Redirect, Box<
         .join(format!("{}_{}_{}_{}.cocoon", doc.date, doc.institution, doc.name, doc.page));
     let checksum_name = filename.clone();
     let password = config.password.clone().unwrap();
-    crypto::encrypt_file(filename.to_str().unwrap(), &password)?;
+    println!("encrypt_it={}", doc.encrypt_it);
+    let source = Path::new(&config.target_directory).join(&doc.filename);
+    crypto::encrypt_file(source, filename, &password)?;
     checksum::generate_sha256(checksum_name).unwrap();
     Ok(Redirect::to("/"))
 }

@@ -55,6 +55,14 @@
               <input type="number" name="page" id="page" value="{{ page }}" min="1" value="1">
             </td>
           </tr>
+          <tr>
+            <td>
+              <label for="encrypt_it">Encrypt?</label><br>
+            </td>
+            <td>
+              <input type="checkbox" id="encrypt_it" name="encrypt_it" value="true">
+            </td>
+          </tr>
           <tr class="button">
             <td>
               <button type="submit">Change</button>
