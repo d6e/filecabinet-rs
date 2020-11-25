@@ -86,8 +86,8 @@ fn test_encrypt_decrypt_file() {
     drop(f);
 
     // Encrypt it.
-    let target = get_encrypted_name(clear_text);
-    encrypt_file(clear_text, target, "password").unwrap();
+    let target = get_encrypted_name(&clear_text);
+    encrypt_file(&clear_text, target, "password").unwrap();
 
     // Delete old file.
     std::fs::remove_file(&clear_text).unwrap();
@@ -98,7 +98,7 @@ fn test_encrypt_decrypt_file() {
     decrypt_file(cipher_text.to_str().unwrap(), "password").unwrap();
 
     // Verify file was encrypted and decrypted without loss.
-    let mut f = File::open(&clear_text).unwrap();
+    let mut f = File::open(clear_text).unwrap();
     let mut buffer = Vec::new();
     f.read_to_end(&mut buffer).unwrap();
 
