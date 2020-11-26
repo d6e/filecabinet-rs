@@ -175,15 +175,16 @@ fn index(config: State<cli::Config>) -> Template {
 #[get("/doc")]
 fn get_docs(config: State<cli::Config>) -> JsonValue {
     println!("GET /doc -- listing files in '{}'", &config.target_directory);
-    let docs = list_files(&PathBuf::from(&config.target_directory));
-    println!("docs={:?}", docs);
+    let mut docs = list_files(&PathBuf::from(&config.target_directory));
+    docs.sort();
     JsonValue(serde_json::json!(docs))
 }
 
 #[get("/doc/<filename>")]
 fn get_doc(config: State<cli::Config>, filename: String) -> Template {
     let now: DateTime<Utc> = Utc::now();
-    let files: Vec<String> = list_files(&PathBuf::from(&config.target_directory));
+    let mut files: Vec<String> = list_files(&PathBuf::from(&config.target_directory));
+    files.sort();
     if filename.ends_with(crypto::ENCRYPTION_FILE_EXT) {
         // If file is encrypted, decrypt to temporary dir and return new file
         let path = Path::new(&config.target_directory).join(filename.clone());
