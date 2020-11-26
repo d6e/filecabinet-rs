@@ -236,7 +236,10 @@ fn new(config: State<cli::Config>, doc: Form<Document>) -> Result<Redirect, Box<
         checksum::generate_sha256(checksum_name).unwrap();
     } else {
         let source = Path::new(&config.target_directory).join(&doc.filename);
-        let extension: String = source.extension().unwrap_or(OsStr::new("")).to_owned().into_string().unwrap_or(String::new());
+        let extension: String = source.extension()
+            .and_then(std::ffi::OsStr::to_str)
+            .map(|s| s.to_ascii_lowercase())
+            .unwrap_or(String::new());
         let target = Path::new(&config.target_directory)
             .join(format!("{}_{}_{}_{}.{}", doc.date, doc.institution, doc.name, doc.page, extension));
         std::fs::rename(source, target)?;
