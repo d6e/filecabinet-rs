@@ -145,20 +145,26 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if let Some(paths) = &config.normalize {
-        paths.iter().map(|path| {
-            let source = Path::new(path);
-            let doc: OptDoc = to_document(&path);
-            let extension: String = source.extension()
-                .and_then(std::ffi::OsStr::to_str)
-                .map(|s| s.to_ascii_lowercase())
-                .unwrap_or(String::new());
-            println!("\tParsing {:?}", source);
-            let target = Path::new(&config.target_directory)
-                .join(format!("{}_{}_{}_{}.{}", doc.date.expect("date error"), doc.institution.expect("institution error"), doc.name.expect("name error"), doc.page.expect("page error"), extension));
-            println!("Renaming {:?} to {:?}", source, target);
-            std::fs::rename(source, target).unwrap();
-            path
-        }).for_each(drop);
+        paths.iter()
+            .map(Path::new)
+            .filter(|p| p.is_file())
+            .map(|source| {
+                let doc: OptDoc = to_document(source);
+                let extension: String = source.extension()
+                    .and_then(std::ffi::OsStr::to_str)
+                    .map(|s| s.to_ascii_lowercase())
+                    .unwrap_or(String::new());
+                println!("\tParsing {:?}", source);
+                let target = Path::new(&config.target_directory)
+                    .join(format!("{}_{}_{}_{}.{}",
+                        doc.date.expect("date error"),
+                        doc.institution.expect("institution error"),
+                        doc.name.expect("name error"),
+                        doc.page.unwrap_or("1".to_owned()),
+                        extension));
+                println!("Renaming {:?} to {:?}", source, target);
+                std::fs::rename(source, target).unwrap();
+            }).for_each(drop);
         std::process::exit(0);
     }
 
@@ -339,14 +345,11 @@ fn test_parse_page() {
     assert_eq!(parse_page(&"pg20"), Some("20".to_owned()));
 }
 
-fn get_filestem_from_filename(filename: &str) -> Option<&str> {
-    Path::new(filename)
-        .file_stem()
+fn to_document<T: AsRef<Path>>(filename: T) -> OptDoc {
+    let filename = filename.as_ref();
+    let filestem: &str = filename.file_stem()
         .and_then(OsStr::to_str)
-}
-
-fn to_document(filename: &str) -> OptDoc {
-    let filestem: &str = get_filestem_from_filename(filename).unwrap_or(filename);
+        .unwrap_or(filename.to_str().unwrap());
     let v: Vec<&str> = filestem.split('_').collect();
     OptDoc {
         date: v.get(0).and_then(parse_date),
