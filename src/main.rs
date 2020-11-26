@@ -225,14 +225,21 @@ fn get_doc(config: State<cli::Config>, filename: String) -> Template {
 
 #[post("/doc", data = "<doc>")]
 fn new(config: State<cli::Config>, doc: Form<Document>) -> Result<Redirect, Box<dyn Error>> {
-    let filename = Path::new(&config.target_directory)
-        .join(format!("{}_{}_{}_{}.cocoon", doc.date, doc.institution, doc.name, doc.page));
-    let checksum_name = filename.clone();
-    let password = config.password.clone().unwrap();
-    println!("encrypt_it={}", doc.encrypt_it);
-    let source = Path::new(&config.target_directory).join(&doc.filename);
-    crypto::encrypt_file(source, filename, &password)?;
-    checksum::generate_sha256(checksum_name).unwrap();
+    if doc.encrypt_it {
+        let filename = Path::new(&config.target_directory)
+            .join(format!("{}_{}_{}_{}.cocoon", doc.date, doc.institution, doc.name, doc.page));
+        let checksum_name = filename.clone();
+        let password = config.password.clone().unwrap();
+        let source = Path::new(&config.target_directory).join(&doc.filename);
+        crypto::encrypt_file(source, filename, &password)?;
+        checksum::generate_sha256(checksum_name).unwrap();
+    } else {
+        let source = Path::new(&config.target_directory).join(&doc.filename);
+        let extension: String = source.extension().unwrap_or(OsStr::new("")).to_owned().into_string().unwrap_or(String::new());
+        let target = Path::new(&config.target_directory)
+            .join(format!("{}_{}_{}_{}.{}", doc.date, doc.institution, doc.name, doc.page, extension));
+        std::fs::rename(source, target)?;
+    }
     Ok(Redirect::to("/"))
 }
 
