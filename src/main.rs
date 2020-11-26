@@ -272,25 +272,35 @@ fn list_files(path: &PathBuf) -> Vec<String> {
 lazy_static! {
     static ref RE_WITH_HYPHENS: Regex = Regex::new(r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})").unwrap();
     static ref RE_NO_HYPHENS: Regex = Regex::new(r"^(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})").unwrap();
+    static ref RE_YEAR_ONLY: Regex = Regex::new(r"^(?P<year>\d{4})").unwrap();
 }
 
 fn parse_date(text: &str) -> Option<String> {
     // Returns the parsed date in ISO8601 format
     RE_WITH_HYPHENS.captures(text).map(|x|
         format!("{}-{}-{}",
-            x.name("year").unwrap().as_str().to_string(),
-            x.name("month").unwrap().as_str().to_string(),
-            x.name("day").unwrap().as_str().to_string(),
+            x.name("year").unwrap().as_str(),
+            x.name("month").unwrap().as_str(),
+            x.name("day").unwrap().as_str(),
         )
     ).or(
         RE_NO_HYPHENS.captures(text).map(|x|
             format!("{}-{}-{}",
-                x.name("year").unwrap().as_str().to_string(),
-                x.name("month").unwrap().as_str().to_string(),
-                x.name("day").unwrap().as_str().to_string(),
+                x.name("year").unwrap().as_str(),
+                x.name("month").unwrap().as_str(),
+                x.name("day").unwrap().as_str(),
+            )
+        )
+    ).or(
+        RE_YEAR_ONLY.captures(text).map(|x|
+            format!("{}-{}-{}",
+                x.name("year").unwrap().as_str(),
+                x.name("month").map(|m|m.as_str()).unwrap_or("01"),
+                x.name("day").map(|m|m.as_str()).unwrap_or("01"),
             )
         )
     )
+
 }
 
 fn get_filestem_from_filename(filename: &str) -> Option<&str> {
@@ -318,4 +328,8 @@ fn test_parse_date_hyphens() {
 #[test]
 fn test_parse_date_no_hyphens() {
     assert_eq!(parse_date("20180530_boop_loop"), Some("2018-05-30".to_string()))
+}
+#[test]
+fn test_parse_date_year_only() {
+    assert_eq!(parse_date("2018_boop_loop"), Some("2018-01-01".to_string()))
 }
