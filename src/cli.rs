@@ -10,6 +10,7 @@ pub struct Config {
     pub file_to_decrypt: Option<Vec<String>>,
     pub file_to_encrypt: Option<Vec<String>>,
     pub verify: bool,
+    pub normalize: Option<Vec<String>>,
 }
 
 pub fn get_program_input() -> Config {
@@ -20,6 +21,7 @@ pub fn get_program_input() -> Config {
     let name_decrypt_file = "decrypt-file";
     let name_encrypt_file = "encrypt-file";
     let name_verify = "verify";
+    let name_normalize = "normalize";
     let default_target_directory = String::from(".");
     let matches = App::new("filecabinet")
         .version("1.0")
@@ -75,7 +77,15 @@ pub fn get_program_input() -> Config {
             Arg::with_name(name_verify)
                 .long(name_verify)
                 .help("Verify the file integrity of all files."),
+        ).arg(
+            Arg::with_name(name_normalize)
+                .long(name_normalize)
+                .takes_value(true)
+                .multiple(true)
+                .value_name("FILE")
+                .help("The files to normalize by naming scheme."),
         )
+
         .get_matches();
 
     // Read password file
@@ -108,6 +118,7 @@ pub fn get_program_input() -> Config {
         file_to_decrypt: values_t!(matches.values_of(name_decrypt_file), String).ok(),
         file_to_encrypt: values_t!(matches.values_of(name_encrypt_file), String).ok(),
         verify: matches.is_present(name_verify),
+        normalize: values_t!(matches.values_of(name_normalize), String).ok(),
     };
 
     // Validate times the password must be specified

@@ -97,9 +97,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         std::process::exit(0);
     }
 
-    let pass = &config.password.clone().unwrap();
     // If there's a specific file we should decrypt, do that.
     if let Some(paths) = &config.file_to_decrypt {
+        let pass = &config.password.clone().unwrap();
         let included: Vec<String> = paths.iter().filter(|p| p.ends_with(crypto::ENCRYPTION_FILE_EXT)).map(String::to_string).collect();
         let excluded: Vec<String> = paths.iter().filter(|p| {! p.ends_with(crypto::ENCRYPTION_FILE_EXT)}).map(String::to_string).collect();
         let pb = ProgressBar::new(included.len() as u64);
@@ -120,6 +120,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // If there's a specific file we should encrypt, do that too.
     if let Some(paths) = &config.file_to_encrypt {
+        let pass = &config.password.clone().unwrap();
         let exclude_files = |p: &str| { p.ends_with(crypto::ENCRYPTION_FILE_EXT) || p.ends_with(".sha256")};
         let included: Vec<String> = paths.iter().filter(|p| {! exclude_files(p)} ).map(String::to_string).collect();
         let excluded: Vec<String> = paths.iter().filter(|p| exclude_files(p)).map(String::to_string).collect();
@@ -140,6 +141,24 @@ fn main() -> Result<(), Box<dyn Error>> {
         let bullet_pt = "\n    ";
         println!("Successfully encrypted files:{}{}", bullet_pt, included.join(bullet_pt));
         println!("Ignored:{}{}", bullet_pt, excluded.join(bullet_pt));
+        std::process::exit(0);
+    }
+
+    if let Some(paths) = &config.normalize {
+        paths.iter().map(|path| {
+            let source = Path::new(path);
+            let doc: OptDoc = to_document(&path);
+            let extension: String = source.extension()
+                .and_then(std::ffi::OsStr::to_str)
+                .map(|s| s.to_ascii_lowercase())
+                .unwrap_or(String::new());
+            println!("\tParsing {:?}", source);
+            let target = Path::new(&config.target_directory)
+                .join(format!("{}_{}_{}_{}.{}", doc.date.expect("date error"), doc.institution.expect("institution error"), doc.name.expect("name error"), doc.page.expect("page error"), extension));
+            println!("Renaming {:?} to {:?}", source, target);
+            std::fs::rename(source, target).unwrap();
+            path
+        }).for_each(drop);
         std::process::exit(0);
     }
 
@@ -194,7 +213,7 @@ fn get_doc(config: State<cli::Config>, filename: String) -> Template {
         }
         let unencrypted_path: PathBuf = crypto::get_decrypted_name(path);
         let unencrypted_name = unencrypted_path.file_name().unwrap().to_str().unwrap();
-        let date = parse_date(unencrypted_name).unwrap();
+        let date = parse_date(&unencrypted_name).unwrap();
         let doc = to_document(&unencrypted_path.to_str().unwrap());
 
         let target_directory = unencrypted_path.parent().unwrap().to_str().unwrap().to_owned().replace("/", "\\u{002F}");
@@ -209,7 +228,7 @@ fn get_doc(config: State<cli::Config>, filename: String) -> Template {
         };
         return Template::render("index", &new_context);
     } else {
-        let date = parse_date(&filename).unwrap_or(now.format("%Y-%m-%d").to_string());
+        let date = parse_date(&filename.as_ref()).unwrap_or(now.format("%Y-%m-%d").to_string());
         let doc = to_document(&filename);
         let context = Context {
             filename: filename,
@@ -235,6 +254,7 @@ fn new(config: State<cli::Config>, doc: Form<Document>) -> Result<Redirect, Box<
         crypto::encrypt_file(source, filename, &password)?;
         checksum::generate_sha256(checksum_name).unwrap();
     } else {
+        // Normalize the filename
         let source = Path::new(&config.target_directory).join(&doc.filename);
         let extension: String = source.extension()
             .and_then(std::ffi::OsStr::to_str)
@@ -275,7 +295,7 @@ lazy_static! {
     static ref RE_YEAR_ONLY: Regex = Regex::new(r"^(?P<year>\d{4})").unwrap();
 }
 
-fn parse_date(text: &str) -> Option<String> {
+fn parse_date(text: &&str) -> Option<String> {
     // Returns the parsed date in ISO8601 format
     RE_WITH_HYPHENS.captures(text).map(|x|
         format!("{}-{}-{}",
@@ -300,7 +320,23 @@ fn parse_date(text: &str) -> Option<String> {
             )
         )
     )
+}
 
+lazy_static! {
+    static ref RE_PARSE_PAGE: Regex = Regex::new(r"(\d+)").unwrap();
+}
+
+fn parse_page(text: &&str) -> Option<String> {
+    RE_PARSE_PAGE.captures(text).and_then(|c| c.get(1)).map(|m| m.as_str().to_owned())
+}
+
+#[test]
+fn test_parse_page() {
+    assert_eq!(parse_page(&""), None);
+    assert_eq!(parse_page(&"pg"), None);
+    assert_eq!(parse_page(&"01"), Some("01".to_owned()));
+    assert_eq!(parse_page(&"20"), Some("20".to_owned()));
+    assert_eq!(parse_page(&"pg20"), Some("20".to_owned()));
 }
 
 fn get_filestem_from_filename(filename: &str) -> Option<&str> {
@@ -310,26 +346,27 @@ fn get_filestem_from_filename(filename: &str) -> Option<&str> {
 }
 
 fn to_document(filename: &str) -> OptDoc {
-    let filestem = get_filestem_from_filename(filename).unwrap_or(filename);
+    let filestem: &str = get_filestem_from_filename(filename).unwrap_or(filename);
     let v: Vec<&str> = filestem.split('_').collect();
     OptDoc {
-        date: parse_date(&v.get(0).unwrap().to_string()),
+        date: v.get(0).and_then(parse_date),
         institution: v.get(1).map(|x| x.to_string()),
         name: v.get(2).map(|x| x.to_string()),
-        page: v.get(3).map(|x| x.to_string()),
+        page: v.get(3).and_then(parse_page),
     }
 }
 
+
 #[test]
 fn test_parse_date_hyphens() {
-    assert_eq!(parse_date("2020-04-03_boop_loop"), Some("2020-04-03".to_string()))
+    assert_eq!(parse_date(&"2020-04-03_boop_loop"), Some("2020-04-03".to_string()))
 }
 
 #[test]
 fn test_parse_date_no_hyphens() {
-    assert_eq!(parse_date("20180530_boop_loop"), Some("2018-05-30".to_string()))
+    assert_eq!(parse_date(&"20180530_boop_loop"), Some("2018-05-30".to_string()))
 }
 #[test]
 fn test_parse_date_year_only() {
-    assert_eq!(parse_date("2018_boop_loop"), Some("2018-01-01".to_string()))
+    assert_eq!(parse_date(&"2018_boop_loop"), Some("2018-01-01".to_string()))
 }
