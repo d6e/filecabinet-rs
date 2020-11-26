@@ -162,9 +162,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                         doc.name.expect("name error"),
                         doc.page.unwrap_or("1".to_owned()),
                         extension));
+                (source, target)
+            })
+            .filter(|(s, t)| s != t)
+            .for_each(|(source, target)| {
                 println!("Renaming {:?} to {:?}", source, target);
                 std::fs::rename(source, target).unwrap();
-            }).for_each(drop);
+            });
+
         std::process::exit(0);
     }
 
