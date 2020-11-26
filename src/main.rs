@@ -253,7 +253,10 @@ fn list_files(path: &PathBuf) -> Vec<String> {
         .map(|x| x.unwrap().path())
         .filter(|x| Path::new(x).is_file())
         .filter(|x| {
-                let ext = x.extension().unwrap_or(OsStr::new(""));
+                let ext: String = x.extension()
+                    .and_then(std::ffi::OsStr::to_str)
+                    .map(|s| s.to_ascii_lowercase())
+                    .unwrap_or(String::new());
                 ext == "pdf" ||
                 ext == "jpg" ||
                 ext == "png" ||
