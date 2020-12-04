@@ -1,3 +1,4 @@
+use iced::futures::{AsyncReadExt, AsyncWriteExt};
 use iced::{
     button, scrollable, text_input, Align, Application, Button, Checkbox, Column, Command,
     Container, Element, Font, HorizontalAlignment, Length, Row, Scrollable, Settings, Text,
@@ -489,14 +490,14 @@ enum SaveError {
 impl SavedState {
     fn path() -> std::path::PathBuf {
         let mut path = if let Some(project_dirs) =
-            directories_next::ProjectDirs::from("rs", "Iced", "Todos")
+            directories_next::ProjectDirs::from("rs", "d6e", "filecabinet")
         {
             project_dirs.data_dir().into()
         } else {
             std::env::current_dir().unwrap_or(std::path::PathBuf::new())
         };
 
-        path.push("todos.json");
+        path.push("filecabinet.json");
 
         path
     }
@@ -510,7 +511,7 @@ impl SavedState {
             .await
             .map_err(|_| LoadError::FileError)?;
 
-        file.read_to_string(&mut contents)
+        AsyncReadExt::read_to_string(&mut file, &mut contents)
             .await
             .map_err(|_| LoadError::FileError)?;
 
@@ -535,7 +536,7 @@ impl SavedState {
                 .await
                 .map_err(|_| SaveError::FileError)?;
 
-            file.write_all(json.as_bytes())
+            AsyncWriteExt::write_all(&mut file, json.as_bytes())
                 .await
                 .map_err(|_| SaveError::WriteError)?;
         }
