@@ -5,13 +5,17 @@ use iced::{
     TextInput,
 };
 use serde::{Deserialize, Serialize};
+use std::env;
+use std::path::Path;
+
+mod utils;
 
 pub fn main() -> iced::Result {
-    Todos::run(Settings::default())
+    FileCabinet::run(Settings::default())
 }
 
 #[derive(Debug)]
-enum Todos {
+enum FileCabinet {
     Loading,
     Loaded(State),
 }
@@ -38,22 +42,22 @@ enum Message {
     TaskMessage(usize, TaskMessage),
 }
 
-impl Application for Todos {
+impl Application for FileCabinet {
     type Executor = iced::executor::Default;
     type Message = Message;
     type Flags = ();
 
-    fn new(_flags: ()) -> (Todos, Command<Message>) {
+    fn new(_flags: ()) -> (FileCabinet, Command<Message>) {
         (
-            Todos::Loading,
+            FileCabinet::Loading,
             Command::perform(SavedState::load(), Message::Loaded),
         )
     }
 
     fn title(&self) -> String {
         let dirty = match self {
-            Todos::Loading => false,
-            Todos::Loaded(state) => state.dirty,
+            FileCabinet::Loading => false,
+            FileCabinet::Loaded(state) => state.dirty,
         };
 
         format!("Filecabinet {}", if dirty { "*" } else { "" })
@@ -61,10 +65,10 @@ impl Application for Todos {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match self {
-            Todos::Loading => {
+            FileCabinet::Loading => {
                 match message {
                     Message::Loaded(Ok(state)) => {
-                        *self = Todos::Loaded(State {
+                        *self = FileCabinet::Loaded(State {
                             input_value: state.input_value,
                             filter: state.filter,
                             tasks: state.tasks,
@@ -72,14 +76,14 @@ impl Application for Todos {
                         });
                     }
                     Message::Loaded(Err(_)) => {
-                        *self = Todos::Loaded(State::default());
+                        *self = FileCabinet::Loaded(State::default());
                     }
                     _ => {}
                 }
 
                 Command::none()
             }
-            Todos::Loaded(state) => {
+            FileCabinet::Loaded(state) => {
                 let mut saved = false;
 
                 match message {
@@ -136,8 +140,8 @@ impl Application for Todos {
 
     fn view(&mut self) -> Element<Message> {
         match self {
-            Todos::Loading => loading_message(),
-            Todos::Loaded(State {
+            FileCabinet::Loading => loading_message(),
+            FileCabinet::Loaded(State {
                 scroll,
                 input,
                 input_value,
@@ -146,24 +150,26 @@ impl Application for Todos {
                 controls,
                 ..
             }) => {
-                let title = Text::new("todos")
+                let title = Text::new("filecabinet")
                     .width(Length::Fill)
                     .size(100)
                     .color([0.5, 0.5, 0.5])
                     .horizontal_alignment(HorizontalAlignment::Center);
 
-                let input = TextInput::new(
-                    input,
-                    "What needs to be done?",
-                    input_value,
-                    Message::InputChanged,
-                )
-                .padding(15)
-                .size(30)
-                .on_submit(Message::CreateTask);
+                // let input = TextInput::new(
+                //     input,
+                //     "What needs to be done?",
+                //     input_value,
+                //     Message::InputChanged,
+                // )
+                // .padding(15)
+                // .size(30)
+                // .on_submit(Message::CreateTask);
 
                 let controls = controls.view(&tasks, *filter);
                 let filtered_tasks = tasks.iter().filter(|task| filter.matches(task));
+
+                let files = utils::list_files(&Path::new(".").to_path_buf());
 
                 let tasks: Element<_> = if filtered_tasks.count() > 0 {
                     tasks
@@ -179,9 +185,9 @@ impl Application for Todos {
                         .into()
                 } else {
                     empty_message(match filter {
-                        Filter::All => "You have not created a task yet...",
-                        Filter::Active => "All your tasks are done! :D",
-                        Filter::Completed => "You have not completed a task yet...",
+                        Filter::All => "No files found...",
+                        Filter::Normalized => "",
+                        Filter::Unnormalized => "",
                     })
                 };
 
@@ -189,7 +195,7 @@ impl Application for Todos {
                     .max_width(800)
                     .spacing(20)
                     .push(title)
-                    .push(input)
+                    // .push(input)
                     .push(controls)
                     .push(tasks);
 
@@ -379,14 +385,14 @@ impl Controls {
                     ))
                     .push(filter_button(
                         active_button,
-                        "Active",
-                        Filter::Active,
+                        "Normalized",
+                        Filter::Normalized,
                         current_filter,
                     ))
                     .push(filter_button(
                         completed_button,
-                        "Completed",
-                        Filter::Completed,
+                        "Unnormalized",
+                        Filter::Unnormalized,
                         current_filter,
                     )),
             )
@@ -396,8 +402,8 @@ impl Controls {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Filter {
     All,
-    Active,
-    Completed,
+    Normalized,
+    Unnormalized,
 }
 
 impl Default for Filter {
@@ -410,8 +416,8 @@ impl Filter {
     fn matches(&self, task: &Task) -> bool {
         match self {
             Filter::All => true,
-            Filter::Active => !task.completed,
-            Filter::Completed => task.completed,
+            Filter::Normalized => !task.completed,
+            Filter::Unnormalized => task.completed,
         }
     }
 }
@@ -443,14 +449,14 @@ fn empty_message<'a>(message: &str) -> Element<'a, Message> {
 }
 
 // Fonts
-// const ICONS: Font = Font::External {
-//     name: "Icons",
-//     bytes: include_bytes!("../fonts/icons.ttf"),
-// };
+const ICONS: Font = Font::External {
+    name: "Icons",
+    bytes: include_bytes!("../fonts/icons.ttf"),
+};
 
 fn icon(unicode: char) -> Text {
     Text::new(&unicode.to_string())
-        // .font(ICONS)
+        .font(ICONS)
         .width(Length::Units(20))
         .horizontal_alignment(HorizontalAlignment::Center)
         .size(20)

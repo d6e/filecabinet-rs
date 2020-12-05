@@ -269,7 +269,7 @@ struct Context {
 //     Ok(Redirect::to("/"))
 // }
 
-fn list_files(path: &PathBuf) -> Vec<String> {
+pub fn list_files(path: &PathBuf) -> Vec<String> {
     if !path.exists() {
         return Vec::new();
     }
