@@ -23,10 +23,10 @@ enum FileCabinet {
 #[derive(Debug, Default)]
 struct State {
     scroll: scrollable::State,
-    input: text_input::State,
-    input_value: String,
+    path: text_input::State,
+    path_value: String,
     filter: Filter,
-    tasks: Vec<Task>,
+    docs: Vec<Document>,
     controls: Controls,
     dirty: bool,
     saving: bool,
@@ -36,7 +36,7 @@ struct State {
 enum Message {
     Loaded(Result<SavedState, LoadError>),
     Saved(Result<(), SaveError>),
-    InputChanged(String),
+    PathChanged(String),
     CreateTask,
     FilterChanged(Filter),
     TaskMessage(usize, TaskMessage),
@@ -69,9 +69,9 @@ impl Application for FileCabinet {
                 match message {
                     Message::Loaded(Ok(state)) => {
                         *self = FileCabinet::Loaded(State {
-                            input_value: state.input_value,
+                            path_value: state.path,
                             filter: state.filter,
-                            tasks: state.tasks,
+                            docs: state.docs,
                             ..State::default()
                         });
                     }
@@ -87,24 +87,24 @@ impl Application for FileCabinet {
                 let mut saved = false;
 
                 match message {
-                    Message::InputChanged(value) => {
-                        state.input_value = value;
+                    Message::PathChanged(value) => {
+                        state.path_value = value;
                     }
-                    Message::CreateTask => {
-                        if !state.input_value.is_empty() {
-                            state.tasks.push(Task::new(state.input_value.clone()));
-                            state.input_value.clear();
-                        }
-                    }
+                    // Message::CreateTask => {
+                    //     if !state.input_value.is_empty() {
+                    //         state.docs.push(Document::new(state.input_value.clone()));
+                    //         state.input_value.clear();
+                    //     }
+                    // }
                     Message::FilterChanged(filter) => {
                         state.filter = filter;
                     }
                     Message::TaskMessage(i, TaskMessage::Delete) => {
-                        state.tasks.remove(i);
+                        state.docs.remove(i);
                     }
                     Message::TaskMessage(i, task_message) => {
-                        if let Some(task) = state.tasks.get_mut(i) {
-                            task.update(task_message);
+                        if let Some(doc) = state.docs.get_mut(i) {
+                            doc.update(task_message);
                         }
                     }
                     Message::Saved(_) => {
@@ -124,9 +124,9 @@ impl Application for FileCabinet {
 
                     Command::perform(
                         SavedState {
-                            input_value: state.input_value.clone(),
+                            path: state.path_value.clone(),
                             filter: state.filter,
-                            tasks: state.tasks.clone(),
+                            docs: state.docs.clone(),
                         }
                         .save(),
                         Message::Saved,
@@ -143,10 +143,10 @@ impl Application for FileCabinet {
             FileCabinet::Loading => loading_message(),
             FileCabinet::Loaded(State {
                 scroll,
-                input,
-                input_value,
+                path,
+                path_value,
                 filter,
-                tasks,
+                docs,
                 controls,
                 ..
             }) => {
@@ -156,29 +156,28 @@ impl Application for FileCabinet {
                     .color([0.5, 0.5, 0.5])
                     .horizontal_alignment(HorizontalAlignment::Center);
 
-                // let input = TextInput::new(
-                //     input,
-                //     "What needs to be done?",
-                //     input_value,
-                //     Message::InputChanged,
-                // )
-                // .padding(15)
-                // .size(30)
-                // .on_submit(Message::CreateTask);
+                let path_input = TextInput::new(
+                    path,
+                    "Specify path to documents",
+                    path_value,
+                    Message::PathChanged,
+                )
+                .padding(10)
+                .size(16)
+                .on_submit(Message::CreateTask);
 
-                let controls = controls.view(&tasks, *filter);
-                let filtered_tasks = tasks.iter().filter(|task| filter.matches(task));
+                let controls = controls.view(&docs, *filter);
+                let filtered_tasks = docs.iter().filter(|doc| filter.matches(doc));
 
                 let files = utils::list_files(&Path::new(".").to_path_buf());
 
-                let tasks: Element<_> = if filtered_tasks.count() > 0 {
-                    tasks
-                        .iter_mut()
+                let docs: Element<_> = if filtered_tasks.count() > 0 {
+                    docs.iter_mut()
                         .enumerate()
-                        .filter(|(_, task)| filter.matches(task))
-                        .fold(Column::new().spacing(20), |column, (i, task)| {
+                        .filter(|(_, doc)| filter.matches(doc))
+                        .fold(Column::new().spacing(20), |column, (i, doc)| {
                             column.push(
-                                task.view()
+                                doc.view()
                                     .map(move |message| Message::TaskMessage(i, message)),
                             )
                         })
@@ -195,9 +194,9 @@ impl Application for FileCabinet {
                     .max_width(800)
                     .spacing(20)
                     .push(title)
-                    // .push(input)
+                    .push(path_input)
                     .push(controls)
-                    .push(tasks);
+                    .push(docs);
 
                 Scrollable::new(scroll)
                     .padding(40)
@@ -209,7 +208,7 @@ impl Application for FileCabinet {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Task {
+struct Document {
     description: String,
     completed: bool,
 
@@ -245,9 +244,9 @@ pub enum TaskMessage {
     Delete,
 }
 
-impl Task {
+impl Document {
     fn new(description: String) -> Self {
-        Task {
+        Document {
             description,
             completed: false,
             state: TaskState::Idle {
@@ -306,7 +305,7 @@ impl Task {
             } => {
                 let text_input = TextInput::new(
                     text_input,
-                    "Describe your task...",
+                    "Document Name",
                     &self.description,
                     TaskMessage::DescriptionEdited,
                 )
@@ -343,7 +342,7 @@ pub struct Controls {
 }
 
 impl Controls {
-    fn view(&mut self, tasks: &[Task], current_filter: Filter) -> Row<Message> {
+    fn view(&mut self, tasks: &[Document], current_filter: Filter) -> Row<Message> {
         let Controls {
             all_button,
             active_button,
@@ -366,9 +365,9 @@ impl Controls {
             .align_items(Align::Center)
             .push(
                 Text::new(&format!(
-                    "{} {} left",
+                    "{} {} found",
                     tasks_left,
-                    if tasks_left == 1 { "task" } else { "tasks" }
+                    if tasks_left == 1 { "doc" } else { "docs" }
                 ))
                 .width(Length::Fill)
                 .size(16),
@@ -413,7 +412,7 @@ impl Default for Filter {
 }
 
 impl Filter {
-    fn matches(&self, task: &Task) -> bool {
+    fn matches(&self, task: &Document) -> bool {
         match self {
             Filter::All => true,
             Filter::Normalized => !task.completed,
@@ -473,9 +472,9 @@ fn delete_icon() -> Text {
 // Persistence
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SavedState {
-    input_value: String,
+    path: String,
     filter: Filter,
-    tasks: Vec<Task>,
+    docs: Vec<Document>,
 }
 
 #[derive(Debug, Clone)]
