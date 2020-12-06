@@ -5,6 +5,7 @@ use iced::{
     TextInput,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::linked_list::Iter;
 use std::env;
 use std::path::Path;
 
@@ -89,6 +90,14 @@ impl Application for FileCabinet {
                 match message {
                     Message::PathChanged(value) => {
                         state.path_value = value;
+                        state.docs = utils::list_files(&Path::new(&state.path_value).to_path_buf())
+                            .iter()
+                            .map(|path| Document {
+                                path: path.to_owned(),
+                                completed: false,
+                                state: Default::default(),
+                            })
+                            .collect();
                     }
                     // Message::CreateTask => {
                     //     if !state.input_value.is_empty() {
@@ -169,8 +178,6 @@ impl Application for FileCabinet {
                 let controls = controls.view(&docs, *filter);
                 let filtered_tasks = docs.iter().filter(|doc| filter.matches(doc));
 
-                let files = utils::list_files(&Path::new(".").to_path_buf());
-
                 let docs: Element<_> = if filtered_tasks.count() > 0 {
                     docs.iter_mut()
                         .enumerate()
@@ -209,7 +216,7 @@ impl Application for FileCabinet {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Document {
-    description: String,
+    path: String,
     completed: bool,
 
     #[serde(skip)]
@@ -239,15 +246,15 @@ impl Default for TaskState {
 pub enum TaskMessage {
     Completed(bool),
     Edit,
-    DescriptionEdited(String),
+    PathEdited(String),
     FinishEdition,
     Delete,
 }
 
 impl Document {
-    fn new(description: String) -> Self {
+    fn new(path: String) -> Self {
         Document {
-            description,
+            path,
             completed: false,
             state: TaskState::Idle {
                 edit_button: button::State::new(),
@@ -266,11 +273,11 @@ impl Document {
                     delete_button: button::State::new(),
                 };
             }
-            TaskMessage::DescriptionEdited(new_description) => {
-                self.description = new_description;
+            TaskMessage::PathEdited(new_path) => {
+                self.path = new_path;
             }
             TaskMessage::FinishEdition => {
-                if !self.description.is_empty() {
+                if !self.path.is_empty() {
                     self.state = TaskState::Idle {
                         edit_button: button::State::new(),
                     }
@@ -283,9 +290,8 @@ impl Document {
     fn view(&mut self) -> Element<TaskMessage> {
         match &mut self.state {
             TaskState::Idle { edit_button } => {
-                let checkbox =
-                    Checkbox::new(self.completed, &self.description, TaskMessage::Completed)
-                        .width(Length::Fill);
+                let checkbox = Checkbox::new(self.completed, &self.path, TaskMessage::Completed)
+                    .width(Length::Fill);
 
                 Row::new()
                     .spacing(20)
@@ -306,8 +312,8 @@ impl Document {
                 let text_input = TextInput::new(
                     text_input,
                     "Document Name",
-                    &self.description,
-                    TaskMessage::DescriptionEdited,
+                    &self.path,
+                    TaskMessage::PathEdited,
                 )
                 .on_submit(TaskMessage::FinishEdition)
                 .padding(10);
@@ -412,11 +418,11 @@ impl Default for Filter {
 }
 
 impl Filter {
-    fn matches(&self, task: &Document) -> bool {
+    fn matches(&self, doc: &Document) -> bool {
         match self {
             Filter::All => true,
-            Filter::Normalized => !task.completed,
-            Filter::Unnormalized => task.completed,
+            Filter::Normalized => !doc.completed,
+            Filter::Unnormalized => doc.completed,
         }
     }
 }
