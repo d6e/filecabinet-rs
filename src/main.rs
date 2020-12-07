@@ -1,13 +1,18 @@
 use iced::futures::{AsyncReadExt, AsyncWriteExt};
+use iced::widget::pane_grid::{Content, Pane};
 use iced::{
-    button, scrollable, text_input, Align, Application, Button, Checkbox, Column, Command,
-    Container, Element, Font, HorizontalAlignment, Length, Row, Scrollable, Settings, Text,
-    TextInput,
+    button, pane_grid, scrollable, text_input, Align, Application, Button, Checkbox, Column,
+    Command, Container, Element, Font, HorizontalAlignment, Image, Length, PaneGrid, Row,
+    Scrollable, Settings, Text, TextInput,
 };
+use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 use std::collections::linked_list::Iter;
 use std::env;
+use std::fmt::Debug;
+use std::ops::Deref;
 use std::path::Path;
+use std::path::PathBuf;
 
 mod utils;
 
@@ -15,22 +20,25 @@ pub fn main() -> iced::Result {
     FileCabinet::run(Settings::default())
 }
 
-#[derive(Debug)]
 enum FileCabinet {
     Loading,
     Loaded(State),
 }
 
-#[derive(Debug, Default)]
 struct State {
-    scroll: scrollable::State,
-    path: text_input::State,
-    path_value: String,
-    filter: Filter,
-    docs: Vec<Document>,
-    controls: Controls,
+    panes: pane_grid::State<Box<dyn PaneContent>>,
     dirty: bool,
     saving: bool,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        State {
+            panes: pane_grid::State::new(Box::new(DocPane::default()) as Box<dyn PaneContent>).0,
+            dirty: false,
+            saving: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +49,161 @@ enum Message {
     CreateTask,
     FilterChanged(Filter),
     TaskMessage(usize, TaskMessage),
+}
+
+#[derive(Debug, Default)]
+struct DocPane {
+    scroll: scrollable::State,
+    path: text_input::State,
+    path_value: String,
+    filter: Filter,
+    controls: Controls,
+    docs: Vec<Document>,
+}
+
+#[derive(Debug, Default)]
+struct ImagePane {
+    preview_image: String,
+}
+
+trait PaneContent {
+    fn update(&mut self, message: Message);
+    fn view(&mut self, pane: &Pane) -> Element<Message>;
+}
+
+impl PaneContent for ImagePane {
+    // let ext = path
+    //     .extension()
+    //     .unwrap()
+    //     .to_str()
+    //     .unwrap()
+    //     .to_ascii_lowercase();
+    // if ext.ends_with("pdf") {
+    //     // Convert pdf to image
+    //     ImagePane {
+    //         preview_image: *Path::new(""),
+    //     }
+    // } else {
+    //     ImagePane {
+    //         preview_image: path,
+    //     }
+    // }
+
+    fn update(&mut self, message: Message) {}
+
+    fn view(&mut self, _: &Pane) -> Element<'_, Message> {
+        println!(
+            "subject=preview_pane status=open image='{}'",
+            &self.preview_image
+        );
+        Column::new()
+            .push(Text::new(&self.preview_image))
+            .push(Image::new(&self.preview_image))
+            .align_items(Align::Center)
+            .width(Length::Fill)
+            .into()
+    }
+}
+
+impl PaneContent for DocPane {
+    fn update(&mut self, message: Message) {
+        match message {
+            Message::Loaded(_) => {}
+            Message::Saved(_) => {}
+            Message::PathChanged(value) => {
+                self.path_value = value;
+                let dir_path = Path::new(&self.path_value).to_path_buf();
+                self.docs = utils::list_files(&dir_path)
+                    .iter()
+                    .map(|path| {
+                        let mut full_path = dir_path.clone();
+                        full_path.push(path);
+                        Document {
+                            path: full_path
+                                .to_str()
+                                .expect(&format!("can't convert '{}' to a str", path))
+                                .to_string(),
+                            completed: false,
+                            state: Default::default(),
+                        }
+                    })
+                    .collect();
+            }
+            Message::CreateTask => {}
+            Message::FilterChanged(filter) => {
+                self.filter = filter;
+            }
+            Message::TaskMessage(i, TaskMessage::Delete) => {
+                self.docs.remove(i);
+            }
+            Message::TaskMessage(i, task_message) => {
+                if let Some(doc) = self.docs.get_mut(i) {
+                    doc.update(task_message);
+                }
+            }
+        }
+    }
+
+    fn view(&mut self, pane: &Pane) -> Element<Message> {
+        let DocPane {
+            path,
+            path_value,
+            docs,
+            filter,
+            controls,
+            ..
+        } = self;
+        let title = Text::new("filecabinet")
+            .width(Length::Fill)
+            .size(100)
+            .color([0.5, 0.5, 0.5])
+            .horizontal_alignment(HorizontalAlignment::Center);
+
+        let path_input = TextInput::new(
+            path,
+            "Specify path to documents",
+            path_value,
+            Message::PathChanged,
+        )
+        .padding(10)
+        .size(16)
+        .on_submit(Message::CreateTask);
+
+        let controls = controls.view(&docs, *filter);
+        let filtered_tasks = docs.iter().filter(|doc| filter.matches(doc));
+
+        let docs: Element<_> = if filtered_tasks.count() > 0 {
+            docs.iter_mut()
+                .enumerate()
+                .filter(|(_, doc)| filter.matches(doc))
+                .fold(Column::new().spacing(20), |column, (i, doc)| {
+                    column.push(
+                        doc.view(pane)
+                            .map(move |message| Message::TaskMessage(i, message)),
+                    )
+                })
+                .into()
+        } else {
+            empty_message(match filter {
+                Filter::All => "No files found...",
+                Filter::Normalized => "",
+                Filter::Unnormalized => "",
+            })
+        };
+
+        let content = Column::new()
+            .max_width(800)
+            .spacing(20)
+            .push(title)
+            .push(path_input)
+            .push(controls)
+            .push(docs);
+
+        Scrollable::new(&mut self.scroll)
+            .padding(40)
+            .push(Container::new(content).width(Length::Fill).center_x())
+            .into()
+    }
 }
 
 impl Application for FileCabinet {
@@ -68,13 +231,8 @@ impl Application for FileCabinet {
         match self {
             FileCabinet::Loading => {
                 match message {
-                    Message::Loaded(Ok(state)) => {
-                        *self = FileCabinet::Loaded(State {
-                            path_value: state.path,
-                            filter: state.filter,
-                            docs: state.docs,
-                            ..State::default()
-                        });
+                    Message::Loaded(Ok(_state)) => {
+                        *self = FileCabinet::Loaded(State::default());
                     }
                     Message::Loaded(Err(_)) => {
                         *self = FileCabinet::Loaded(State::default());
@@ -88,16 +246,10 @@ impl Application for FileCabinet {
                 let mut saved = false;
 
                 match message {
-                    Message::PathChanged(value) => {
-                        state.path_value = value;
-                        state.docs = utils::list_files(&Path::new(&state.path_value).to_path_buf())
-                            .iter()
-                            .map(|path| Document {
-                                path: path.to_owned(),
-                                completed: false,
-                                state: Default::default(),
-                            })
-                            .collect();
+                    Message::PathChanged(ref value) => {
+                        for (pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(message.clone());
+                        }
                     }
                     // Message::CreateTask => {
                     //     if !state.input_value.is_empty() {
@@ -106,14 +258,27 @@ impl Application for FileCabinet {
                     //     }
                     // }
                     Message::FilterChanged(filter) => {
-                        state.filter = filter;
+                        for (pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(message.clone());
+                        }
                     }
-                    Message::TaskMessage(i, TaskMessage::Delete) => {
-                        state.docs.remove(i);
+                    Message::TaskMessage(_, TaskMessage::OpenPreviewPane(path, pane)) => {
+                        state.panes.split(
+                            pane_grid::Axis::Vertical,
+                            &pane,
+                            Box::new(ImagePane {
+                                preview_image: path,
+                            }),
+                        );
                     }
-                    Message::TaskMessage(i, task_message) => {
-                        if let Some(doc) = state.docs.get_mut(i) {
-                            doc.update(task_message);
+                    Message::TaskMessage(_, TaskMessage::Delete) => {
+                        for (pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(message.clone());
+                        }
+                    }
+                    Message::TaskMessage(i, ref task_message) => {
+                        for (pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(message.clone());
                         }
                     }
                     Message::Saved(_) => {
@@ -131,15 +296,17 @@ impl Application for FileCabinet {
                     state.dirty = false;
                     state.saving = true;
 
-                    Command::perform(
-                        SavedState {
-                            path: state.path_value.clone(),
-                            filter: state.filter,
-                            docs: state.docs.clone(),
-                        }
-                        .save(),
-                        Message::Saved,
-                    )
+                    // TODO: migrate
+                    // Command::perform(
+                    //     SavedState {
+                    //         path: state.path_value.clone(),
+                    //         filter: state.filter,
+                    //         docs: state.docs.clone(),
+                    //     }
+                    //     .save(),
+                    //     Message::Saved,
+                    // )
+                    Command::none()
                 } else {
                     Command::none()
                 }
@@ -150,64 +317,37 @@ impl Application for FileCabinet {
     fn view(&mut self) -> Element<Message> {
         match self {
             FileCabinet::Loading => loading_message(),
-            FileCabinet::Loaded(State {
-                scroll,
-                path,
-                path_value,
-                filter,
-                docs,
-                controls,
-                ..
-            }) => {
-                let title = Text::new("filecabinet")
+            FileCabinet::Loaded(state) => {
+                // let grid: PaneGrid<Message> = PaneGrid::new(&mut pane_state.0, |pane, state| {
+                //     pane_grid::Content::new(match state {
+                //         ImagePaneState::DocPane => Container::new(
+                //             Scrollable::new(scroll)
+                //                 .padding(40)
+                //                 .push(Container::new(content).width(Length::Fill).center_x()),
+                //         ),
+                //         ImagePaneState::ImagePane => Container::new(Text::new("image pane")),
+                //     })
+                // });
+
+                let pane_grid = PaneGrid::new(&mut state.panes, |pane, content| {
+                    // let is_focused = focus == Some(pane);
+
+                    // .title_bar(title_bar)
+                    // .style(style::Pane { is_focused })
+                    let c: Element<Message> = Container::new(content.view(&pane)).into();
+                    pane_grid::Content::new(c)
+                })
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .spacing(10);
+                // .on_click(Message::Clicked)
+                // .on_drag(Message::Dragged)
+                // .on_resize(10, Message::Resized);
+
+                Container::new(pane_grid)
                     .width(Length::Fill)
-                    .size(100)
-                    .color([0.5, 0.5, 0.5])
-                    .horizontal_alignment(HorizontalAlignment::Center);
-
-                let path_input = TextInput::new(
-                    path,
-                    "Specify path to documents",
-                    path_value,
-                    Message::PathChanged,
-                )
-                .padding(10)
-                .size(16)
-                .on_submit(Message::CreateTask);
-
-                let controls = controls.view(&docs, *filter);
-                let filtered_tasks = docs.iter().filter(|doc| filter.matches(doc));
-
-                let docs: Element<_> = if filtered_tasks.count() > 0 {
-                    docs.iter_mut()
-                        .enumerate()
-                        .filter(|(_, doc)| filter.matches(doc))
-                        .fold(Column::new().spacing(20), |column, (i, doc)| {
-                            column.push(
-                                doc.view()
-                                    .map(move |message| Message::TaskMessage(i, message)),
-                            )
-                        })
-                        .into()
-                } else {
-                    empty_message(match filter {
-                        Filter::All => "No files found...",
-                        Filter::Normalized => "",
-                        Filter::Unnormalized => "",
-                    })
-                };
-
-                let content = Column::new()
-                    .max_width(800)
-                    .spacing(20)
-                    .push(title)
-                    .push(path_input)
-                    .push(controls)
-                    .push(docs);
-
-                Scrollable::new(scroll)
-                    .padding(40)
-                    .push(Container::new(content).width(Length::Fill).center_x())
+                    .height(Length::Fill)
+                    .padding(10)
                     .into()
             }
         }
@@ -227,6 +367,7 @@ struct Document {
 pub enum TaskState {
     Idle {
         edit_button: button::State,
+        preview_button: button::State,
     },
     Editing {
         text_input: text_input::State,
@@ -238,6 +379,7 @@ impl Default for TaskState {
     fn default() -> Self {
         TaskState::Idle {
             edit_button: button::State::new(),
+            preview_button: button::State::new(),
         }
     }
 }
@@ -249,6 +391,7 @@ pub enum TaskMessage {
     PathEdited(String),
     FinishEdition,
     Delete,
+    OpenPreviewPane(String, Pane),
 }
 
 impl Document {
@@ -258,6 +401,7 @@ impl Document {
             completed: false,
             state: TaskState::Idle {
                 edit_button: button::State::new(),
+                preview_button: button::State::new(),
             },
         }
     }
@@ -280,23 +424,30 @@ impl Document {
                 if !self.path.is_empty() {
                     self.state = TaskState::Idle {
                         edit_button: button::State::new(),
+                        preview_button: button::State::new(),
                     }
                 }
             }
             TaskMessage::Delete => {}
+            _ => {}
         }
     }
 
-    fn view(&mut self) -> Element<TaskMessage> {
+    fn view(&mut self, pane: &Pane) -> Element<TaskMessage> {
         match &mut self.state {
-            TaskState::Idle { edit_button } => {
-                let checkbox = Checkbox::new(self.completed, &self.path, TaskMessage::Completed)
+            TaskState::Idle {
+                preview_button,
+                edit_button,
+            } => {
+                let checkbox = Checkbox::new(self.completed, "", TaskMessage::Completed);
+                let preview = Button::new(preview_button, Text::new(&self.path))
+                    .on_press(TaskMessage::OpenPreviewPane(self.path.clone(), *pane))
                     .width(Length::Fill);
-
                 Row::new()
                     .spacing(20)
                     .align_items(Align::Center)
                     .push(checkbox)
+                    .push(preview)
                     .push(
                         Button::new(edit_button, edit_icon())
                             .on_press(TaskMessage::Edit)

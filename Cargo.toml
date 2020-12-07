@@ -23,7 +23,7 @@ ring = "0.16.15"
 indicatif = {version = "*", features = ["rayon"]}
 rayon = "1.5.0"
 atomicwrites = "0.2.5"
-iced = { version = "0.2.0", features = ["async-std", "debug"] }
+iced = { version = "0.2.0", features = ["async-std", "debug", "image"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 async-std = "1.0"
