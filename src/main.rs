@@ -30,6 +30,7 @@ struct State {
     panes: pane_grid::State<Box<dyn PaneContent>>,
     doc_pane: Option<Pane>,
     preview_pane: Option<Pane>,
+    preview_image: String,
     dirty: bool,
     saving: bool,
 }
@@ -42,6 +43,7 @@ impl Default for State {
             panes: pane_state,
             doc_pane: Some(pane),
             preview_pane: None,
+            preview_image: "".to_string(),
             dirty: false,
             saving: false,
         }
@@ -266,20 +268,32 @@ impl Application for FileCabinet {
                                     ) {
                                         // then save the preview pane.
                                         state.preview_pane = Some(preview_pane);
+                                        state.preview_image = path;
                                     }
                                 }
                                 Some(preview_pane) => {
-                                    println!("Preview pane open, closing and reopening new one");
-                                    // If the preview pane is open, close it,
-                                    state.panes.close(&preview_pane);
-                                    // then open the new one.
-                                    state.panes.split(
-                                        pane_grid::Axis::Vertical,
-                                        doc_pane,
-                                        Box::new(ImagePane {
-                                            preview_image: path.clone(),
-                                        }),
-                                    );
+                                    println!("Preview pane open, closing and reopening new one...");
+                                    if state.preview_image != path {
+                                        println!("Preview pane image is the same path, refusing to open.");
+                                        // If the preview pane is open, close it,
+                                        state.panes.close(&preview_pane);
+                                        // then open the new one.
+                                        if let Some((pane, _)) = state.panes.split(
+                                            pane_grid::Axis::Vertical,
+                                            doc_pane,
+                                            Box::new(ImagePane {
+                                                preview_image: path.clone(),
+                                            }),
+                                        ) {
+                                            // Update the preview pane with state.
+                                            state.preview_pane = Some(pane);
+                                            state.preview_image = path;
+                                        } else {
+                                            // If fails, unset the preview pane.
+                                            state.preview_pane = None;
+                                            state.preview_image = String::new();
+                                        }
+                                    }
                                 }
                             }
                         }
