@@ -399,6 +399,7 @@ pub enum TaskState {
     Editing {
         text_input: text_input::State,
         delete_button: button::State,
+        cancel_button: button::State,
     },
 }
 
@@ -418,6 +419,7 @@ pub enum TaskMessage {
     PathEdited(String),
     FinishEdition,
     Delete,
+    Cancel,
     OpenPreviewPane(String, Pane),
 }
 
@@ -442,7 +444,14 @@ impl Document {
                 self.state = TaskState::Editing {
                     text_input: text_input::State::focused(),
                     delete_button: button::State::new(),
+                    cancel_button: button::State::new(),
                 };
+            }
+            TaskMessage::Cancel => {
+                self.state = TaskState::Idle {
+                    edit_button: button::State::new(),
+                    preview_button: button::State::new(),
+                }
             }
             TaskMessage::PathEdited(new_path) => {
                 self.path = new_path;
@@ -486,6 +495,7 @@ impl Document {
             TaskState::Editing {
                 text_input,
                 delete_button,
+                cancel_button,
             } => {
                 let text_input = TextInput::new(
                     text_input,
@@ -496,21 +506,35 @@ impl Document {
                 .on_submit(TaskMessage::FinishEdition)
                 .padding(10);
 
-                Row::new()
-                    .spacing(20)
-                    .align_items(Align::Center)
-                    .push(text_input)
+                Column::new()
                     .push(
-                        Button::new(
-                            delete_button,
-                            Row::new()
-                                .spacing(10)
-                                .push(delete_icon())
-                                .push(Text::new("Delete")),
-                        )
-                        .on_press(TaskMessage::Delete)
-                        .padding(10)
-                        .style(style::Button::Destructive),
+                        Row::new()
+                            .spacing(20)
+                            .align_items(Align::Center)
+                            .push(text_input)
+                            .push(
+                                Button::new(
+                                    delete_button,
+                                    Row::new()
+                                        .spacing(10)
+                                        .push(delete_icon())
+                                        .push(Text::new("Delete")),
+                                )
+                                .on_press(TaskMessage::Delete)
+                                .padding(10)
+                                .style(style::Button::Destructive),
+                            ),
+                    )
+                    .push(
+                        Row::new().spacing(20).align_items(Align::Center).push(
+                            Button::new(
+                                cancel_button,
+                                Row::new().spacing(10).push(Text::new("Cancel")),
+                            )
+                            .on_press(TaskMessage::Cancel)
+                            .padding(10)
+                            .style(style::Button::Destructive),
+                        ),
                     )
                     .into()
             }
