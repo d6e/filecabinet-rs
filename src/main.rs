@@ -7,6 +7,7 @@ use iced::{
 };
 use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
+use std::borrow::Borrow;
 use std::collections::linked_list::Iter;
 use std::env;
 use std::fmt::Debug;
@@ -27,14 +28,20 @@ enum FileCabinet {
 
 struct State {
     panes: pane_grid::State<Box<dyn PaneContent>>,
+    doc_pane: Option<Pane>,
+    preview_pane: Option<Pane>,
     dirty: bool,
     saving: bool,
 }
 
 impl Default for State {
     fn default() -> Self {
+        let (pane_state, pane) =
+            pane_grid::State::new(Box::new(DocPane::default()) as Box<dyn PaneContent>);
         State {
-            panes: pane_grid::State::new(Box::new(DocPane::default()) as Box<dyn PaneContent>).0,
+            panes: pane_state,
+            doc_pane: Some(pane),
+            preview_pane: None,
             dirty: false,
             saving: false,
         }
@@ -72,25 +79,7 @@ trait PaneContent {
 }
 
 impl PaneContent for ImagePane {
-    // let ext = path
-    //     .extension()
-    //     .unwrap()
-    //     .to_str()
-    //     .unwrap()
-    //     .to_ascii_lowercase();
-    // if ext.ends_with("pdf") {
-    //     // Convert pdf to image
-    //     ImagePane {
-    //         preview_image: *Path::new(""),
-    //     }
-    // } else {
-    //     ImagePane {
-    //         preview_image: path,
-    //     }
-    // }
-
     fn update(&mut self, message: Message) {}
-
     fn view(&mut self, _: &Pane) -> Element<'_, Message> {
         println!(
             "subject=preview_pane status=open image='{}'",
@@ -262,14 +251,38 @@ impl Application for FileCabinet {
                             boxed_content.update(message.clone());
                         }
                     }
-                    Message::TaskMessage(_, TaskMessage::OpenPreviewPane(path, pane)) => {
-                        state.panes.split(
-                            pane_grid::Axis::Vertical,
-                            &pane,
-                            Box::new(ImagePane {
-                                preview_image: path,
-                            }),
-                        );
+                    Message::TaskMessage(_, TaskMessage::OpenPreviewPane(path, _)) => {
+                        if let Some(doc_pane) = &state.doc_pane {
+                            match state.preview_pane {
+                                None => {
+                                    println!("Preview pane closed, opening for the first time");
+                                    // If the preview pane isn't open, open it,
+                                    if let Some((preview_pane, split)) = state.panes.split(
+                                        pane_grid::Axis::Vertical,
+                                        doc_pane,
+                                        Box::new(ImagePane {
+                                            preview_image: path.clone(),
+                                        }),
+                                    ) {
+                                        // then save the preview pane.
+                                        state.preview_pane = Some(preview_pane);
+                                    }
+                                }
+                                Some(preview_pane) => {
+                                    println!("Preview pane open, closing and reopening new one");
+                                    // If the preview pane is open, close it,
+                                    state.panes.close(&preview_pane);
+                                    // then open the new one.
+                                    state.panes.split(
+                                        pane_grid::Axis::Vertical,
+                                        doc_pane,
+                                        Box::new(ImagePane {
+                                            preview_image: path.clone(),
+                                        }),
+                                    );
+                                }
+                            }
+                        }
                     }
                     Message::TaskMessage(_, TaskMessage::Delete) => {
                         for (pane, boxed_content) in state.panes.iter_mut() {
