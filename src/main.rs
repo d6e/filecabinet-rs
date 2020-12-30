@@ -1,3 +1,7 @@
+#[macro_use]
+extern crate lazy_static;
+use crate::utils::{parse_date, to_document};
+use chrono::{DateTime, Utc};
 use iced::futures::{AsyncReadExt, AsyncWriteExt};
 use iced::widget::pane_grid::{Content, Pane};
 use iced::{
@@ -109,14 +113,15 @@ impl PaneContent for DocPane {
                     .map(|path| {
                         let mut full_path = dir_path.clone();
                         full_path.push(path);
-                        Document {
-                            path: full_path
-                                .to_str()
-                                .expect(&format!("can't convert '{}' to a str", path))
-                                .to_string(),
-                            completed: false,
-                            state: Default::default(),
-                        }
+                        // Document {
+                        //     path: full_path
+                        //         .to_str()
+                        //         .expect(&format!("can't convert '{}' to a str", path))
+                        //         .to_string(),
+                        //     completed: false,
+                        //     state: Default::default(),
+                        // }
+                        Document::new(full_path.to_str().unwrap().to_string())
                     })
                     .collect();
             }
@@ -384,7 +389,12 @@ impl Application for FileCabinet {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Document {
     path: String,
-    completed: bool,
+    date: String,
+    institution: String,
+    title: String,
+    page: u8,
+    completed: bool,  // TODO remove
+    encrypt_it: bool, // TODO remove
 
     #[serde(skip)]
     state: TaskState,
@@ -425,13 +435,17 @@ pub enum TaskMessage {
 
 impl Document {
     fn new(path: String) -> Self {
+        let options = to_document(&path);
+        let now: DateTime<Utc> = Utc::now();
         Document {
             path,
+            date: options.date.unwrap_or(now.format("%Y-%m-%d").to_string()),
+            institution: options.institution.unwrap_or(String::new()),
+            title: options.name.unwrap_or(String::new()),
+            page: options.page.unwrap_or(String::from("1")).parse().unwrap(),
             completed: false,
-            state: TaskState::Idle {
-                edit_button: button::State::new(),
-                preview_button: button::State::new(),
-            },
+            encrypt_it: false,
+            state: TaskState::default(),
         }
     }
 
