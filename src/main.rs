@@ -64,7 +64,7 @@ enum Message {
     Saved(Result<(), SaveError>),
     PathChanged(String),
     FilterChanged(Filter),
-    TaskMessage(usize, TaskMessage),
+    DocMessage(usize, DocMessage),
     ClosePreviewPane(Pane),
 }
 
@@ -131,12 +131,12 @@ impl PaneContent for DocPane {
             Message::FilterChanged(filter) => {
                 self.filter = filter;
             }
-            Message::TaskMessage(i, TaskMessage::Delete) => {
+            Message::DocMessage(i, DocMessage::Delete) => {
                 self.docs.remove(i);
             }
-            Message::TaskMessage(i, task_message) => {
+            Message::DocMessage(i, doc_message) => {
                 if let Some(doc) = self.docs.get_mut(i) {
-                    doc.update(task_message);
+                    doc.update(doc_message);
                 }
             }
             _ => {}
@@ -152,16 +152,16 @@ impl PaneContent for DocPane {
         } = self;
 
         let controls = controls.view(&docs, *filter);
-        let filtered_tasks = docs.iter().filter(|doc| filter.matches(doc));
+        let filtered_docs = docs.iter().filter(|doc| filter.matches(doc));
 
-        let docs: Element<_> = if filtered_tasks.count() > 0 {
+        let docs: Element<_> = if filtered_docs.count() > 0 {
             docs.iter_mut()
                 .enumerate()
                 .filter(|(_, doc)| filter.matches(doc))
                 .fold(Column::new().spacing(20), |column, (i, doc)| {
                     column.push(
                         doc.view(&pane)
-                            .map(move |message| Message::TaskMessage(i, message)),
+                            .map(move |message| Message::DocMessage(i, message)),
                     )
                 })
                 .into()
@@ -257,7 +257,7 @@ impl Application for FileCabinet {
                         state.panes.close(&pane);
                         state.preview_pane = Default::default();
                     }
-                    Message::TaskMessage(_, TaskMessage::OpenPreviewPane(path, _)) => {
+                    Message::DocMessage(_, DocMessage::OpenPreviewPane(path, _)) => {
                         if let Some(doc_pane) = &state.doc_pane {
                             match state.preview_pane {
                                 None => {
@@ -304,12 +304,12 @@ impl Application for FileCabinet {
                             }
                         }
                     }
-                    Message::TaskMessage(_, TaskMessage::Delete) => {
+                    Message::DocMessage(_, DocMessage::Delete) => {
                         for (pane, boxed_content) in state.panes.iter_mut() {
                             boxed_content.update(message.clone());
                         }
                     }
-                    Message::TaskMessage(i, ref task_message) => {
+                    Message::DocMessage(i, ref doc_message) => {
                         for (pane, boxed_content) in state.panes.iter_mut() {
                             boxed_content.update(message.clone());
                         }
@@ -406,11 +406,11 @@ struct Document {
     encrypt_it: bool, // TODO remove
 
     #[serde(skip)]
-    state: TaskState,
+    state: DocState,
 }
 
 #[derive(Debug, Clone)]
-pub enum TaskState {
+pub enum DocState {
     Idle {
         edit_button: button::State,
         preview_button: button::State,
@@ -426,9 +426,9 @@ pub enum TaskState {
     },
 }
 
-impl Default for TaskState {
+impl Default for DocState {
     fn default() -> Self {
-        TaskState::Idle {
+        DocState::Idle {
             edit_button: button::State::new(),
             preview_button: button::State::new(),
         }
@@ -436,7 +436,7 @@ impl Default for TaskState {
 }
 
 #[derive(Debug, Clone)]
-pub enum TaskMessage {
+pub enum DocMessage {
     Completed(bool),
     Edit,
     DateEdited(String),
@@ -461,17 +461,17 @@ impl Document {
             page: options.page.unwrap_or(String::from("1")).parse().unwrap(),
             completed: false,
             encrypt_it: false,
-            state: TaskState::default(),
+            state: DocState::default(),
         }
     }
 
-    fn update(&mut self, message: TaskMessage) {
+    fn update(&mut self, message: DocMessage) {
         match message {
-            TaskMessage::Completed(completed) => {
+            DocMessage::Completed(completed) => {
                 self.completed = completed;
             }
-            TaskMessage::Edit => {
-                self.state = TaskState::Editing {
+            DocMessage::Edit => {
+                self.state = DocState::Editing {
                     date_input: Default::default(),
                     institution_input: Default::default(),
                     title_input: Default::default(),
@@ -481,13 +481,13 @@ impl Document {
                     submit_button: button::State::new(),
                 };
             }
-            TaskMessage::Cancel => {
-                self.state = TaskState::Idle {
+            DocMessage::Cancel => {
+                self.state = DocState::Idle {
                     edit_button: button::State::new(),
                     preview_button: button::State::new(),
                 }
             }
-            TaskMessage::FinishEdition => {
+            DocMessage::FinishEdition => {
                 let basename = Path::new(&self.path).parent();
                 let extension = utils::extension(&self.path);
                 let filename = format!(
@@ -508,37 +508,37 @@ impl Document {
                     &self.path, &new_path
                 );
                 self.path = new_path.to_string(); // Update UI doc path.
-                self.state = TaskState::Idle {
+                self.state = DocState::Idle {
                     edit_button: button::State::new(),
                     preview_button: button::State::new(),
                 }
             }
-            TaskMessage::Delete => {}
-            TaskMessage::DateEdited(s) => {
+            DocMessage::Delete => {}
+            DocMessage::DateEdited(s) => {
                 self.date = s;
             }
-            TaskMessage::InstitutionEdited(s) => {
+            DocMessage::InstitutionEdited(s) => {
                 self.institution = s;
             }
-            TaskMessage::PageEdited(s) => {
+            DocMessage::PageEdited(s) => {
                 self.page = s;
             }
-            TaskMessage::TitleEdited(s) => {
+            DocMessage::TitleEdited(s) => {
                 self.title = s;
             }
             _ => {}
         }
     }
 
-    fn view(&mut self, pane: &Pane) -> Element<TaskMessage> {
+    fn view(&mut self, pane: &Pane) -> Element<DocMessage> {
         match &mut self.state {
-            TaskState::Idle {
+            DocState::Idle {
                 preview_button,
                 edit_button,
             } => {
-                let checkbox = Checkbox::new(self.completed, "", TaskMessage::Completed);
+                let checkbox = Checkbox::new(self.completed, "", DocMessage::Completed);
                 let preview = Button::new(preview_button, Text::new(&self.path))
-                    .on_press(TaskMessage::OpenPreviewPane(self.path.clone(), *pane))
+                    .on_press(DocMessage::OpenPreviewPane(self.path.clone(), *pane))
                     .width(Length::Fill);
                 Row::new()
                     .spacing(20)
@@ -547,13 +547,13 @@ impl Document {
                     .push(preview)
                     .push(
                         Button::new(edit_button, edit_icon())
-                            .on_press(TaskMessage::Edit)
+                            .on_press(DocMessage::Edit)
                             .padding(10)
                             .style(style::Button::Icon),
                     )
                     .into()
             }
-            TaskState::Editing {
+            DocState::Editing {
                 date_input,
                 institution_input,
                 title_input,
@@ -566,8 +566,8 @@ impl Document {
                     .spacing(10)
                     .push(Text::new(&self.path))
                     .push(
-                        TextInput::new(date_input, "Date", &self.date, TaskMessage::DateEdited)
-                            .on_submit(TaskMessage::FinishEdition)
+                        TextInput::new(date_input, "Date", &self.date, DocMessage::DateEdited)
+                            .on_submit(DocMessage::FinishEdition)
                             .padding(10),
                     )
                     .push(
@@ -575,19 +575,19 @@ impl Document {
                             institution_input,
                             "Institution",
                             &self.institution,
-                            TaskMessage::InstitutionEdited,
+                            DocMessage::InstitutionEdited,
                         )
-                        .on_submit(TaskMessage::FinishEdition)
+                        .on_submit(DocMessage::FinishEdition)
                         .padding(10),
                     )
                     .push(
-                        TextInput::new(title_input, "Title", &self.title, TaskMessage::TitleEdited)
-                            .on_submit(TaskMessage::FinishEdition)
+                        TextInput::new(title_input, "Title", &self.title, DocMessage::TitleEdited)
+                            .on_submit(DocMessage::FinishEdition)
                             .padding(10),
                     )
                     .push(
-                        TextInput::new(page_input, "Page", &self.page, TaskMessage::PageEdited)
-                            .on_submit(TaskMessage::FinishEdition)
+                        TextInput::new(page_input, "Page", &self.page, DocMessage::PageEdited)
+                            .on_submit(DocMessage::FinishEdition)
                             .padding(10),
                     )
                     .push(
@@ -598,7 +598,7 @@ impl Document {
                                     submit_button,
                                     Row::new().spacing(10).push(Text::new("Submit")),
                                 )
-                                .on_press(TaskMessage::FinishEdition)
+                                .on_press(DocMessage::FinishEdition)
                                 .padding(10)
                                 .style(style::Button::Update),
                             )
@@ -611,7 +611,7 @@ impl Document {
                                         .push(delete_icon())
                                         .push(Text::new("Delete")),
                                 )
-                                .on_press(TaskMessage::Delete)
+                                .on_press(DocMessage::Delete)
                                 .padding(10)
                                 .style(style::Button::Destructive),
                             )
@@ -621,7 +621,7 @@ impl Document {
                                     cancel_button,
                                     Row::new().spacing(10).push(Text::new("Cancel")),
                                 )
-                                .on_press(TaskMessage::Cancel)
+                                .on_press(DocMessage::Cancel)
                                 .padding(10)
                                 .style(style::Button::Cancel),
                             ),
@@ -640,14 +640,14 @@ pub struct Controls {
 }
 
 impl Controls {
-    fn view(&mut self, tasks: &[Document], current_filter: Filter) -> Row<Message> {
+    fn view(&mut self, docs: &[Document], current_filter: Filter) -> Row<Message> {
         let Controls {
             all_button,
             active_button,
             completed_button,
         } = self;
 
-        let tasks_left = tasks.iter().filter(|task| !task.completed).count();
+        let docs_left = docs.iter().filter(|doc| !doc.completed).count();
 
         let filter_button = |state, label, filter, current_filter| {
             let label = Text::new(label).size(16);
@@ -664,8 +664,8 @@ impl Controls {
             .push(
                 Text::new(&format!(
                     "{} {} found",
-                    tasks_left,
-                    if tasks_left == 1 { "doc" } else { "docs" }
+                    docs_left,
+                    if docs_left == 1 { "doc" } else { "docs" }
                 ))
                 .width(Length::Fill)
                 .size(16),
