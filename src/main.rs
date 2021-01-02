@@ -392,7 +392,7 @@ struct Document {
     date: String,
     institution: String,
     title: String,
-    page: u8,
+    page: String,
     completed: bool,  // TODO remove
     encrypt_it: bool, // TODO remove
 
@@ -408,8 +408,13 @@ pub enum TaskState {
     },
     Editing {
         text_input: text_input::State,
+        date_input: text_input::State,
+        institution_input: text_input::State,
+        title_input: text_input::State,
+        page_input: text_input::State,
         delete_button: button::State,
         cancel_button: button::State,
+        submit_button: button::State,
     },
 }
 
@@ -427,7 +432,12 @@ pub enum TaskMessage {
     Completed(bool),
     Edit,
     PathEdited(String),
+    DateEdited(String),
+    InstitutionEdited(String),
+    TitleEdited(String),
+    PageEdited(String),
     FinishEdition,
+    Update,
     Delete,
     Cancel,
     OpenPreviewPane(String, Pane),
@@ -457,8 +467,13 @@ impl Document {
             TaskMessage::Edit => {
                 self.state = TaskState::Editing {
                     text_input: text_input::State::focused(),
+                    date_input: Default::default(),
+                    institution_input: Default::default(),
+                    title_input: Default::default(),
+                    page_input: Default::default(),
                     delete_button: button::State::new(),
                     cancel_button: button::State::new(),
+                    submit_button: button::State::new(),
                 };
             }
             TaskMessage::Cancel => {
@@ -508,37 +523,78 @@ impl Document {
             }
             TaskState::Editing {
                 text_input,
+                date_input,
+                institution_input,
+                title_input,
+                page_input,
                 delete_button,
                 cancel_button,
+                submit_button,
             } => {
-                let text_input = TextInput::new(
-                    text_input,
-                    "Document Name",
-                    &self.path,
-                    TaskMessage::PathEdited,
-                )
-                .on_submit(TaskMessage::FinishEdition)
-                .padding(10);
-
                 Column::new()
+                    // Date field
+                    // .push(Row::new().push(TextInput::new(date_input, "Date", state.date)))
+                    // Submit Button
                     .push(
-                        Row::new()
-                            .spacing(20)
-                            .align_items(Align::Center)
-                            .push(text_input)
-                            .push(
-                                Button::new(
-                                    delete_button,
-                                    Row::new()
-                                        .spacing(10)
-                                        .push(delete_icon())
-                                        .push(Text::new("Delete")),
-                                )
-                                .on_press(TaskMessage::Delete)
-                                .padding(10)
-                                .style(style::Button::Destructive),
-                            ),
+                        TextInput::new(
+                            text_input,
+                            "Document Name",
+                            &self.path,
+                            TaskMessage::PathEdited,
+                        )
+                        .on_submit(TaskMessage::FinishEdition)
+                        .padding(10),
                     )
+                    .push(
+                        TextInput::new(date_input, "Date", &self.date, TaskMessage::DateEdited)
+                            .on_submit(TaskMessage::FinishEdition)
+                            .padding(10),
+                    )
+                    .push(
+                        TextInput::new(
+                            institution_input,
+                            "Institution",
+                            &self.institution,
+                            TaskMessage::InstitutionEdited,
+                        )
+                        .on_submit(TaskMessage::FinishEdition)
+                        .padding(10),
+                    )
+                    .push(
+                        TextInput::new(title_input, "Title", &self.title, TaskMessage::TitleEdited)
+                            .on_submit(TaskMessage::FinishEdition)
+                            .padding(10),
+                    )
+                    .push(
+                        TextInput::new(page_input, "Page", &self.page, TaskMessage::PageEdited)
+                            .on_submit(TaskMessage::FinishEdition)
+                            .padding(10),
+                    )
+                    .push(
+                        Button::new(
+                            submit_button,
+                            Row::new().spacing(10).push(Text::new("Update")),
+                        )
+                        .on_press(TaskMessage::Update)
+                        .padding(10)
+                        .style(style::Button::Destructive),
+                    )
+                    // Delete Button
+                    .push(
+                        Row::new().spacing(20).align_items(Align::Center).push(
+                            Button::new(
+                                delete_button,
+                                Row::new()
+                                    .spacing(10)
+                                    .push(delete_icon())
+                                    .push(Text::new("Delete")),
+                            )
+                            .on_press(TaskMessage::Delete)
+                            .padding(10)
+                            .style(style::Button::Destructive),
+                        ),
+                    )
+                    // Cancel Button
                     .push(
                         Row::new().spacing(20).align_items(Align::Center).push(
                             Button::new(
