@@ -238,7 +238,6 @@ impl Application for FileCabinet {
                 Command::none()
             }
             FileCabinet::Loaded(state) => {
-                println!("loaded");
                 let mut saved = false;
 
                 match message {
@@ -332,13 +331,10 @@ impl Application for FileCabinet {
                     Command::perform(
                         SavedState {
                             target_dir: state.target_dir.clone(),
-                            // filter: state.filter,
-                            // docs: state.docs.clone(),
                         }
                         .save(),
                         Message::Saved,
                     )
-                    // Command::none()
                 } else {
                     Command::none()
                 }
@@ -459,7 +455,7 @@ impl Document {
             institution: options.institution.unwrap_or(String::new()),
             title: options.name.unwrap_or(String::new()),
             page: options.page.unwrap_or(String::from("1")).parse().unwrap(),
-            completed: false,
+            completed: false, // TODO: rename to selected
             encrypt_it: false,
             state: DocState::default(),
         }
@@ -647,10 +643,13 @@ impl Controls {
             completed_button,
         } = self;
 
-        let docs_left = docs.iter().filter(|doc| !doc.completed).count();
-
-        let filter_button = |state, label, filter, current_filter| {
-            let label = Text::new(label).size(16);
+        let filter_button = |state, label, filter: Filter, current_filter: Filter| {
+            let label = Text::new(format!(
+                "{}: {}",
+                label,
+                docs.iter().filter(|d| filter.matches(d)).count()
+            ))
+            .size(16);
             let button = Button::new(state, label).style(style::Button::Filter {
                 selected: filter == current_filter,
             });
@@ -658,41 +657,29 @@ impl Controls {
             button.on_press(Message::FilterChanged(filter)).padding(8)
         };
 
-        Row::new()
-            .spacing(20)
-            .align_items(Align::Center)
-            .push(
-                Text::new(&format!(
-                    "{} {} found",
-                    docs_left,
-                    if docs_left == 1 { "doc" } else { "docs" }
+        Row::new().spacing(20).align_items(Align::Center).push(
+            Row::new()
+                .width(Length::Shrink)
+                .spacing(10)
+                .push(filter_button(
+                    all_button,
+                    "All",
+                    Filter::All,
+                    current_filter,
                 ))
-                .width(Length::Fill)
-                .size(16),
-            )
-            .push(
-                Row::new()
-                    .width(Length::Shrink)
-                    .spacing(10)
-                    .push(filter_button(
-                        all_button,
-                        "All",
-                        Filter::All,
-                        current_filter,
-                    ))
-                    .push(filter_button(
-                        active_button,
-                        "Normalized",
-                        Filter::Normalized,
-                        current_filter,
-                    ))
-                    .push(filter_button(
-                        completed_button,
-                        "Unnormalized",
-                        Filter::Unnormalized,
-                        current_filter,
-                    )),
-            )
+                .push(filter_button(
+                    active_button,
+                    "Normalized",
+                    Filter::Normalized,
+                    current_filter,
+                ))
+                .push(filter_button(
+                    completed_button,
+                    "Unnormalized",
+                    Filter::Unnormalized,
+                    current_filter,
+                )),
+        )
     }
 }
 
@@ -713,8 +700,8 @@ impl Filter {
     fn matches(&self, doc: &Document) -> bool {
         match self {
             Filter::All => true,
-            Filter::Normalized => !doc.completed,
-            Filter::Unnormalized => doc.completed,
+            Filter::Normalized => utils::is_normalized(&doc.path),
+            Filter::Unnormalized => !utils::is_normalized(&doc.path),
         }
     }
 }

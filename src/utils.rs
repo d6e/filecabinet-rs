@@ -1,4 +1,5 @@
 use regex::Regex;
+use std::borrow::Borrow;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
@@ -7,6 +8,30 @@ pub struct OptDoc {
     pub(crate) institution: Option<String>,
     pub(crate) name: Option<String>,
     pub(crate) page: Option<String>,
+}
+
+pub fn is_normalized<P: AsRef<Path>>(source: P) -> bool {
+    let source = source.as_ref();
+    let extension: String = source
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or(String::new());
+    let doc: OptDoc = to_document(source);
+    match source.parent() {
+        Some(basename) => {
+            let target = basename.join(format!(
+                "{}_{}_{}_{}.{}",
+                doc.date.expect("date error"),
+                doc.institution.expect("institution error"),
+                doc.name.expect("name error"),
+                doc.page.unwrap_or("1".to_owned()),
+                extension
+            ));
+            source == target.as_path()
+        }
+        None => false,
+    }
 }
 
 pub fn extension<P: AsRef<Path>>(source: P) -> String {
