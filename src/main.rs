@@ -531,80 +531,98 @@ impl Document {
                 cancel_button,
                 submit_button,
             } => {
-                Column::new()
-                    // Date field
-                    // .push(Row::new().push(TextInput::new(date_input, "Date", state.date)))
-                    // Submit Button
+                Row::new()
                     .push(
-                        TextInput::new(
-                            text_input,
-                            "Document Name",
-                            &self.path,
-                            TaskMessage::PathEdited,
-                        )
-                        .on_submit(TaskMessage::FinishEdition)
-                        .padding(10),
-                    )
-                    .push(
-                        TextInput::new(date_input, "Date", &self.date, TaskMessage::DateEdited)
-                            .on_submit(TaskMessage::FinishEdition)
-                            .padding(10),
-                    )
-                    .push(
-                        TextInput::new(
-                            institution_input,
-                            "Institution",
-                            &self.institution,
-                            TaskMessage::InstitutionEdited,
-                        )
-                        .on_submit(TaskMessage::FinishEdition)
-                        .padding(10),
-                    )
-                    .push(
-                        TextInput::new(title_input, "Title", &self.title, TaskMessage::TitleEdited)
-                            .on_submit(TaskMessage::FinishEdition)
-                            .padding(10),
-                    )
-                    .push(
-                        TextInput::new(page_input, "Page", &self.page, TaskMessage::PageEdited)
-                            .on_submit(TaskMessage::FinishEdition)
-                            .padding(10),
-                    )
-                    .push(
-                        Button::new(
-                            submit_button,
-                            Row::new().spacing(10).push(Text::new("Update")),
-                        )
-                        .on_press(TaskMessage::Update)
-                        .padding(10)
-                        .style(style::Button::Destructive),
-                    )
-                    // Delete Button
-                    .push(
-                        Row::new().spacing(20).align_items(Align::Center).push(
-                            Button::new(
-                                delete_button,
+                        Column::new()
+                            // Date field
+                            // .push(Row::new().push(TextInput::new(date_input, "Date", state.date)))
+                            // Submit Button
+                            .push(
+                                TextInput::new(
+                                    text_input,
+                                    "Document Name",
+                                    &self.path,
+                                    TaskMessage::PathEdited,
+                                )
+                                .on_submit(TaskMessage::FinishEdition)
+                                .padding(10),
+                            )
+                            .push(
+                                TextInput::new(
+                                    date_input,
+                                    "Date",
+                                    &self.date,
+                                    TaskMessage::DateEdited,
+                                )
+                                .on_submit(TaskMessage::FinishEdition)
+                                .padding(10),
+                            )
+                            .push(
+                                TextInput::new(
+                                    institution_input,
+                                    "Institution",
+                                    &self.institution,
+                                    TaskMessage::InstitutionEdited,
+                                )
+                                .on_submit(TaskMessage::FinishEdition)
+                                .padding(10),
+                            )
+                            .push(
+                                TextInput::new(
+                                    title_input,
+                                    "Title",
+                                    &self.title,
+                                    TaskMessage::TitleEdited,
+                                )
+                                .on_submit(TaskMessage::FinishEdition)
+                                .padding(10),
+                            )
+                            .push(
+                                TextInput::new(
+                                    page_input,
+                                    "Page",
+                                    &self.page,
+                                    TaskMessage::PageEdited,
+                                )
+                                .on_submit(TaskMessage::FinishEdition)
+                                .padding(10),
+                            )
+                            .push(
                                 Row::new()
                                     .spacing(10)
-                                    .push(delete_icon())
-                                    .push(Text::new("Delete")),
-                            )
-                            .on_press(TaskMessage::Delete)
-                            .padding(10)
-                            .style(style::Button::Destructive),
-                        ),
-                    )
-                    // Cancel Button
-                    .push(
-                        Row::new().spacing(20).align_items(Align::Center).push(
-                            Button::new(
-                                cancel_button,
-                                Row::new().spacing(10).push(Text::new("Cancel")),
-                            )
-                            .on_press(TaskMessage::Cancel)
-                            .padding(10)
-                            .style(style::Button::Destructive),
-                        ),
+                                    .push(
+                                        Button::new(
+                                            submit_button,
+                                            Row::new().spacing(10).push(Text::new("Update")),
+                                        )
+                                        .on_press(TaskMessage::Update)
+                                        .padding(10)
+                                        .style(style::Button::Destructive),
+                                    )
+                                    // Delete Button
+                                    .push(
+                                        Button::new(
+                                            delete_button,
+                                            Row::new()
+                                                .spacing(10)
+                                                .push(delete_icon())
+                                                .push(Text::new("Delete")),
+                                        )
+                                        .on_press(TaskMessage::Delete)
+                                        .padding(10)
+                                        .style(style::Button::Destructive),
+                                    )
+                                    // Cancel Button
+                                    .push(
+                                        Button::new(
+                                            cancel_button,
+                                            Row::new().spacing(10).push(Text::new("Cancel")),
+                                        )
+                                        .on_press(TaskMessage::Cancel)
+                                        .padding(10)
+                                        .style(style::Button::Destructive),
+                                    ),
+                            ),
                     )
                     .into()
             }
