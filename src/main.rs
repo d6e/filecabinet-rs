@@ -394,10 +394,12 @@ impl Application for FileCabinet {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Document {
     path: String,
+    filename: String,
     date: String,
     institution: String,
     title: String,
     page: String,
+    extension: String,
     completed: bool,  // TODO remove
     encrypt_it: bool, // TODO remove
 
@@ -449,12 +451,18 @@ impl Document {
     fn new(path: String) -> Self {
         let options = to_document(&path);
         let now: DateTime<Utc> = Utc::now();
+        let tmp = &path.clone();
+        let _path = Path::new(tmp);
+        let file_stem = _path.file_stem().unwrap().to_str().unwrap();
+        let extension = utils::extension(_path);
         Document {
             path,
+            filename: format!("{}.{}", file_stem, extension),
             date: options.date.unwrap_or(now.format("%Y-%m-%d").to_string()),
             institution: options.institution.unwrap_or(String::new()),
             title: options.name.unwrap_or(String::new()),
             page: options.page.unwrap_or(String::from("1")).parse().unwrap(),
+            extension: extension.to_string(),
             completed: false, // TODO: rename to selected
             encrypt_it: false,
             state: DocState::default(),
@@ -485,10 +493,9 @@ impl Document {
             }
             DocMessage::FinishEdition => {
                 let basename = Path::new(&self.path).parent();
-                let extension = utils::extension(&self.path);
                 let filename = format!(
                     "{}_{}_{}_{}.{}",
-                    &self.date, &self.institution, &self.title, &self.page, extension
+                    &self.date, &self.institution, &self.title, &self.page, &self.extension
                 );
                 let new_path: String = basename
                     .and_then(|p| {
@@ -533,7 +540,7 @@ impl Document {
                 edit_button,
             } => {
                 let checkbox = Checkbox::new(self.completed, "", DocMessage::Completed);
-                let preview = Button::new(preview_button, Text::new(&self.path))
+                let preview = Button::new(preview_button, Text::new(&self.filename))
                     .on_press(DocMessage::OpenPreviewPane(self.path.clone(), *pane))
                     .width(Length::Fill);
                 Row::new()
@@ -560,7 +567,7 @@ impl Document {
             } => {
                 Column::new()
                     .spacing(10)
-                    .push(Text::new(&self.path))
+                    .push(Text::new(&self.filename))
                     .push(
                         TextInput::new(date_input, "Date", &self.date, DocMessage::DateEdited)
                             .on_submit(DocMessage::FinishEdition)
