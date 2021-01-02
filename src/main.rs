@@ -765,10 +765,6 @@ fn icon(unicode: char) -> Text {
 }
 
 fn edit_icon() -> Text {
-    icon('\u{F304}')
-}
-
-fn close_icon() -> Text {
     icon('\u{F303}')
 }
 
