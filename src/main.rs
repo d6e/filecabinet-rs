@@ -531,97 +531,77 @@ impl Document {
                 cancel_button,
                 submit_button,
             } => {
-                Row::new()
+                Column::new()
+                    .spacing(10)
                     .push(
-                        Column::new()
-                            // Date field
-                            // .push(Row::new().push(TextInput::new(date_input, "Date", state.date)))
-                            // Submit Button
+                        TextInput::new(
+                            text_input,
+                            "Document Name",
+                            &self.path,
+                            TaskMessage::PathEdited,
+                        )
+                        .on_submit(TaskMessage::FinishEdition)
+                        .padding(10),
+                    )
+                    .push(
+                        TextInput::new(date_input, "Date", &self.date, TaskMessage::DateEdited)
+                            .on_submit(TaskMessage::FinishEdition)
+                            .padding(10),
+                    )
+                    .push(
+                        TextInput::new(
+                            institution_input,
+                            "Institution",
+                            &self.institution,
+                            TaskMessage::InstitutionEdited,
+                        )
+                        .on_submit(TaskMessage::FinishEdition)
+                        .padding(10),
+                    )
+                    .push(
+                        TextInput::new(title_input, "Title", &self.title, TaskMessage::TitleEdited)
+                            .on_submit(TaskMessage::FinishEdition)
+                            .padding(10),
+                    )
+                    .push(
+                        TextInput::new(page_input, "Page", &self.page, TaskMessage::PageEdited)
+                            .on_submit(TaskMessage::FinishEdition)
+                            .padding(10),
+                    )
+                    .push(
+                        Row::new()
+                            .spacing(10)
                             .push(
-                                TextInput::new(
-                                    text_input,
-                                    "Document Name",
-                                    &self.path,
-                                    TaskMessage::PathEdited,
+                                Button::new(
+                                    submit_button,
+                                    Row::new().spacing(10).push(Text::new("Update")),
                                 )
-                                .on_submit(TaskMessage::FinishEdition)
-                                .padding(10),
+                                .on_press(TaskMessage::Update)
+                                .padding(10)
+                                .style(style::Button::Update),
                             )
+                            // Delete Button
                             .push(
-                                TextInput::new(
-                                    date_input,
-                                    "Date",
-                                    &self.date,
-                                    TaskMessage::DateEdited,
+                                Button::new(
+                                    delete_button,
+                                    Row::new()
+                                        .spacing(10)
+                                        .push(delete_icon())
+                                        .push(Text::new("Delete")),
                                 )
-                                .on_submit(TaskMessage::FinishEdition)
-                                .padding(10),
+                                .on_press(TaskMessage::Delete)
+                                .padding(10)
+                                .style(style::Button::Destructive),
                             )
+                            // Cancel Button
                             .push(
-                                TextInput::new(
-                                    institution_input,
-                                    "Institution",
-                                    &self.institution,
-                                    TaskMessage::InstitutionEdited,
+                                Button::new(
+                                    cancel_button,
+                                    Row::new().spacing(10).push(Text::new("Cancel")),
                                 )
-                                .on_submit(TaskMessage::FinishEdition)
-                                .padding(10),
-                            )
-                            .push(
-                                TextInput::new(
-                                    title_input,
-                                    "Title",
-                                    &self.title,
-                                    TaskMessage::TitleEdited,
-                                )
-                                .on_submit(TaskMessage::FinishEdition)
-                                .padding(10),
-                            )
-                            .push(
-                                TextInput::new(
-                                    page_input,
-                                    "Page",
-                                    &self.page,
-                                    TaskMessage::PageEdited,
-                                )
-                                .on_submit(TaskMessage::FinishEdition)
-                                .padding(10),
-                            )
-                            .push(
-                                Row::new()
-                                    .spacing(10)
-                                    .push(
-                                        Button::new(
-                                            submit_button,
-                                            Row::new().spacing(10).push(Text::new("Update")),
-                                        )
-                                        .on_press(TaskMessage::Update)
-                                        .padding(10)
-                                        .style(style::Button::Destructive),
-                                    )
-                                    // Delete Button
-                                    .push(
-                                        Button::new(
-                                            delete_button,
-                                            Row::new()
-                                                .spacing(10)
-                                                .push(delete_icon())
-                                                .push(Text::new("Delete")),
-                                        )
-                                        .on_press(TaskMessage::Delete)
-                                        .padding(10)
-                                        .style(style::Button::Destructive),
-                                    )
-                                    // Cancel Button
-                                    .push(
-                                        Button::new(
-                                            cancel_button,
-                                            Row::new().spacing(10).push(Text::new("Cancel")),
-                                        )
-                                        .on_press(TaskMessage::Cancel)
-                                        .padding(10)
-                                        .style(style::Button::Destructive),
-                                    ),
+                                .on_press(TaskMessage::Cancel)
+                                .padding(10)
+                                .style(style::Button::Cancel),
                             ),
                     )
                     .into()
@@ -890,6 +870,8 @@ mod style {
         Filter { selected: bool },
         Icon,
         Destructive,
+        Update,
+        Cancel,
     }
 
     impl button::StyleSheet for Button {
@@ -913,6 +895,20 @@ mod style {
                 },
                 Button::Destructive => button::Style {
                     background: Some(Background::Color(Color::from_rgb(0.8, 0.2, 0.2))),
+                    border_radius: 5.0,
+                    text_color: Color::WHITE,
+                    shadow_offset: Vector::new(1.0, 1.0),
+                    ..button::Style::default()
+                },
+                Button::Update => button::Style {
+                    background: Some(Background::Color(Color::from_rgb(0.467, 0.867, 0.467))),
+                    border_radius: 5.0,
+                    text_color: Color::WHITE,
+                    shadow_offset: Vector::new(1.0, 1.0),
+                    ..button::Style::default()
+                },
+                Button::Cancel => button::Style {
+                    background: Some(Background::Color(Color::from_rgb(0.2, 0.2, 0.2))),
                     border_radius: 5.0,
                     text_color: Color::WHITE,
                     shadow_offset: Vector::new(1.0, 1.0),
