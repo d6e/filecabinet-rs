@@ -268,6 +268,7 @@ impl Application for FileCabinet {
                     }
                     Message::ClosePreviewPane(pane) => {
                         state.panes.close(&pane);
+                        state.preview_pane = Default::default();
                     }
                     Message::TaskMessage(_, TaskMessage::OpenPreviewPane(path, _)) => {
                         if let Some(doc_pane) = &state.doc_pane {
