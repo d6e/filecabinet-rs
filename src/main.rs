@@ -31,6 +31,8 @@ enum FileCabinet {
 }
 
 struct State {
+    target_dir_state: text_input::State,
+    target_dir: String,
     panes: pane_grid::State<Box<dyn PaneContent>>,
     doc_pane: Option<Pane>,
     preview_pane: Option<Pane>,
@@ -44,6 +46,8 @@ impl Default for State {
         let (pane_state, pane) =
             pane_grid::State::new(Box::new(DocPane::default()) as Box<dyn PaneContent>);
         State {
+            target_dir_state: Default::default(),
+            target_dir: "".to_string(),
             panes: pane_state,
             doc_pane: Some(pane),
             preview_pane: None,
@@ -67,8 +71,7 @@ enum Message {
 #[derive(Debug, Default)]
 struct DocPane {
     scroll: scrollable::State,
-    path: text_input::State,
-    path_value: String,
+
     filter: Filter,
     controls: Controls,
     docs: Vec<Document>,
@@ -115,21 +118,12 @@ impl PaneContent for DocPane {
             Message::Loaded(_) => {}
             Message::Saved(_) => {}
             Message::PathChanged(value) => {
-                self.path_value = value;
-                let dir_path = Path::new(&self.path_value).to_path_buf();
+                let dir_path = Path::new(&value).to_path_buf();
                 self.docs = utils::list_files(&dir_path)
                     .iter()
                     .map(|path| {
                         let mut full_path = dir_path.clone();
                         full_path.push(path);
-                        // Document {
-                        //     path: full_path
-                        //         .to_str()
-                        //         .expect(&format!("can't convert '{}' to a str", path))
-                        //         .to_string(),
-                        //     completed: false,
-                        //     state: Default::default(),
-                        // }
                         Document::new(full_path.to_str().unwrap().to_string())
                     })
                     .collect();
@@ -151,27 +145,11 @@ impl PaneContent for DocPane {
 
     fn view(&mut self, pane: Pane) -> Element<Message> {
         let DocPane {
-            path,
-            path_value,
             docs,
             filter,
             controls,
             ..
         } = self;
-        let title = Text::new("filecabinet")
-            .width(Length::Fill)
-            .size(100)
-            .color([0.5, 0.5, 0.5])
-            .horizontal_alignment(HorizontalAlignment::Center);
-
-        let path_input = TextInput::new(
-            path,
-            "Specify path to documents",
-            path_value,
-            Message::PathChanged,
-        )
-        .padding(10)
-        .size(16);
 
         let controls = controls.view(&docs, *filter);
         let filtered_tasks = docs.iter().filter(|doc| filter.matches(doc));
@@ -198,8 +176,6 @@ impl PaneContent for DocPane {
         let content = Column::new()
             .max_width(800)
             .spacing(20)
-            .push(title)
-            .push(path_input)
             .push(controls)
             .push(docs);
 
@@ -235,8 +211,23 @@ impl Application for FileCabinet {
         match self {
             FileCabinet::Loading => {
                 match message {
-                    Message::Loaded(Ok(_state)) => {
-                        *self = FileCabinet::Loaded(State::default());
+                    Message::Loaded(Ok(saved_state)) => {
+                        // Create the panes so that the documents are loaded on launch.
+                        let (mut pane_state, pane) = pane_grid::State::new(Box::new(
+                            DocPane::default(),
+                        )
+                            as Box<dyn PaneContent>);
+                        // Pass the path to each doc_pane doc so it can render.
+                        for (pane, boxed_content) in pane_state.iter_mut() {
+                            boxed_content
+                                .update(Message::PathChanged(saved_state.target_dir.clone()));
+                        }
+                        *self = FileCabinet::Loaded(State {
+                            target_dir: saved_state.target_dir,
+                            panes: pane_state,
+                            doc_pane: Some(pane),
+                            ..Default::default()
+                        });
                     }
                     Message::Loaded(Err(_)) => {
                         *self = FileCabinet::Loaded(State::default());
@@ -247,20 +238,16 @@ impl Application for FileCabinet {
                 Command::none()
             }
             FileCabinet::Loaded(state) => {
+                println!("loaded");
                 let mut saved = false;
 
                 match message {
                     Message::PathChanged(ref value) => {
+                        state.target_dir = value.clone();
                         for (pane, boxed_content) in state.panes.iter_mut() {
                             boxed_content.update(message.clone());
                         }
                     }
-                    // Message::CreateTask => {
-                    //     if !state.input_value.is_empty() {
-                    //         state.docs.push(Document::new(state.input_value.clone()));
-                    //         state.input_value.clear();
-                    //     }
-                    // }
                     Message::FilterChanged(filter) => {
                         for (pane, boxed_content) in state.panes.iter_mut() {
                             boxed_content.update(message.clone());
@@ -342,17 +329,16 @@ impl Application for FileCabinet {
                     state.dirty = false;
                     state.saving = true;
 
-                    // TODO: migrate
-                    // Command::perform(
-                    //     SavedState {
-                    //         path: state.path_value.clone(),
-                    //         filter: state.filter,
-                    //         docs: state.docs.clone(),
-                    //     }
-                    //     .save(),
-                    //     Message::Saved,
-                    // )
-                    Command::none()
+                    Command::perform(
+                        SavedState {
+                            target_dir: state.target_dir.clone(),
+                            // filter: state.filter,
+                            // docs: state.docs.clone(),
+                        }
+                        .save(),
+                        Message::Saved,
+                    )
+                    // Command::none()
                 } else {
                     Command::none()
                 }
@@ -364,17 +350,6 @@ impl Application for FileCabinet {
         match self {
             FileCabinet::Loading => loading_message(),
             FileCabinet::Loaded(state) => {
-                // let grid: PaneGrid<Message> = PaneGrid::new(&mut pane_state.0, |pane, state| {
-                //     pane_grid::Content::new(match state {
-                //         ImagePaneState::DocPane => Container::new(
-                //             Scrollable::new(scroll)
-                //                 .padding(40)
-                //                 .push(Container::new(content).width(Length::Fill).center_x()),
-                //         ),
-                //         ImagePaneState::ImagePane => Container::new(Text::new("image pane")),
-                //     })
-                // });
-
                 let pane_grid = PaneGrid::new(&mut state.panes, |pane, content| {
                     // let is_focused = focus == Some(pane);
 
@@ -390,11 +365,31 @@ impl Application for FileCabinet {
                 // .on_drag(Message::Dragged)
                 // .on_resize(10, Message::Resized);
 
-                Container::new(pane_grid)
+                let title = Text::new("filecabinet")
                     .width(Length::Fill)
-                    .height(Length::Fill)
-                    .padding(10)
-                    .into()
+                    .size(80)
+                    .color([0.5, 0.5, 0.5])
+                    .horizontal_alignment(HorizontalAlignment::Center);
+
+                let target_dir_input = TextInput::new(
+                    &mut state.target_dir_state,
+                    "Specify path to documents",
+                    &*state.target_dir,
+                    Message::PathChanged,
+                )
+                .padding(10)
+                .size(16);
+
+                Container::new(
+                    Column::new()
+                        .push(title)
+                        .push(target_dir_input)
+                        .push(pane_grid),
+                )
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(10)
+                .into()
             }
         }
     }
@@ -775,9 +770,7 @@ fn delete_icon() -> Text {
 // Persistence
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SavedState {
-    path: String,
-    filter: Filter,
-    docs: Vec<Document>,
+    target_dir: String,
 }
 
 #[derive(Debug, Clone)]
