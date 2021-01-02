@@ -407,7 +407,6 @@ pub enum TaskState {
         preview_button: button::State,
     },
     Editing {
-        text_input: text_input::State,
         date_input: text_input::State,
         institution_input: text_input::State,
         title_input: text_input::State,
@@ -431,7 +430,6 @@ impl Default for TaskState {
 pub enum TaskMessage {
     Completed(bool),
     Edit,
-    PathEdited(String),
     DateEdited(String),
     InstitutionEdited(String),
     TitleEdited(String),
@@ -466,7 +464,6 @@ impl Document {
             }
             TaskMessage::Edit => {
                 self.state = TaskState::Editing {
-                    text_input: text_input::State::focused(),
                     date_input: Default::default(),
                     institution_input: Default::default(),
                     title_input: Default::default(),
@@ -482,9 +479,6 @@ impl Document {
                     preview_button: button::State::new(),
                 }
             }
-            TaskMessage::PathEdited(new_path) => {
-                self.path = new_path;
-            }
             TaskMessage::FinishEdition => {
                 if !self.path.is_empty() {
                     self.state = TaskState::Idle {
@@ -494,6 +488,18 @@ impl Document {
                 }
             }
             TaskMessage::Delete => {}
+            TaskMessage::DateEdited(s) => {
+                self.date = s;
+            }
+            TaskMessage::InstitutionEdited(s) => {
+                self.institution = s;
+            }
+            TaskMessage::PageEdited(s) => {
+                self.page = s;
+            }
+            TaskMessage::TitleEdited(s) => {
+                self.title = s;
+            }
             _ => {}
         }
     }
@@ -522,7 +528,6 @@ impl Document {
                     .into()
             }
             TaskState::Editing {
-                text_input,
                 date_input,
                 institution_input,
                 title_input,
@@ -533,16 +538,7 @@ impl Document {
             } => {
                 Column::new()
                     .spacing(10)
-                    .push(
-                        TextInput::new(
-                            text_input,
-                            "Document Name",
-                            &self.path,
-                            TaskMessage::PathEdited,
-                        )
-                        .on_submit(TaskMessage::FinishEdition)
-                        .padding(10),
-                    )
+                    .push(Text::new(&self.path))
                     .push(
                         TextInput::new(date_input, "Date", &self.date, TaskMessage::DateEdited)
                             .on_submit(TaskMessage::FinishEdition)
