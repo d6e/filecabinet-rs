@@ -66,6 +66,8 @@ enum Message {
     FilterChanged(Filter),
     DocMessage(usize, DocMessage),
     ClosePreviewPane(Pane),
+    Dragged(pane_grid::DragEvent),
+    Resized(pane_grid::ResizeEvent),
 }
 
 #[derive(Debug, Default)]
@@ -313,6 +315,12 @@ impl Application for FileCabinet {
                             boxed_content.update(message.clone());
                         }
                     }
+                    Message::Resized(pane_grid::ResizeEvent { split, ratio }) => {
+                        state.panes.resize(&split, ratio);
+                    }
+                    Message::Dragged(pane_grid::DragEvent::Dropped { pane, target }) => {
+                        state.panes.swap(&pane, &target);
+                    }
                     Message::Saved(_) => {
                         state.saving = false;
                         saved = true;
@@ -347,15 +355,14 @@ impl Application for FileCabinet {
             FileCabinet::Loading => loading_message(),
             FileCabinet::Loaded(state) => {
                 let pane_grid = PaneGrid::new(&mut state.panes, |pane, content| {
-                    // let is_focused = focus == Some(pane);
-
-                    // .title_bar(title_bar)
-                    // .style(style::Pane { is_focused })
-                    let c: Element<Message> = Container::new(content.view(pane)).into();
-                    pane_grid::Content::new(c)
+                    pane_grid::Content::new(content.view(pane))
+                        .style(style::Pane {})
+                        .into()
                 })
-                .width(Length::Fill)
-                .height(Length::Fill)
+                // .width(Length::Fill)
+                // .height(Length::Fill)
+                .on_drag(Message::Dragged)
+                .on_resize(10, Message::Resized)
                 .spacing(10);
                 // .on_click(Message::Clicked)
                 // .on_drag(Message::Dragged)
@@ -878,7 +885,27 @@ impl SavedState {
 }
 
 mod style {
-    use iced::{button, Background, Color, Vector};
+    use iced::{button, container, Background, Color, Vector};
+
+    const SURFACE: Color = Color::from_rgb(
+        0xF2 as f32 / 255.0,
+        0xF3 as f32 / 255.0,
+        0xF5 as f32 / 255.0,
+    );
+
+    pub struct Pane {}
+
+    impl container::StyleSheet for Pane {
+        fn style(&self) -> container::Style {
+            container::Style {
+                background: Some(Background::Color(SURFACE)),
+                border_width: 1.0,
+                border_radius: 10.0,
+                border_color: Color::from([0.7, 0.7, 0.7]), // light grey
+                ..Default::default()
+            }
+        }
+    }
 
     pub enum Button {
         Filter { selected: bool },
