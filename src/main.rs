@@ -83,6 +83,7 @@ struct DocPane {
 struct PreviewPane {
     preview_image_path: String,
     close_button: button::State,
+    scroll_state: scrollable::State,
 }
 
 trait PaneContent {
@@ -99,17 +100,23 @@ impl PaneContent for PreviewPane {
         );
         Column::new()
             .push(
-                Row::new().push(
-                    Button::new(&mut self.close_button, Text::new("X"))
-                        .padding(10)
-                        .style(style::Button::Destructive)
-                        .on_press(Message::ClosePreviewPane(pane)),
-                ),
+                Button::new(&mut self.close_button, Text::new("X").size(10))
+                    .padding(10)
+                    .style(style::Button::Destructive)
+                    .on_press(Message::ClosePreviewPane(pane)),
             )
             .push(Text::new(&self.preview_image_path))
-            .push(Image::new(&self.preview_image_path))
-            .align_items(Align::End)
-            .width(Length::Fill)
+            .push(
+                Scrollable::new(&mut self.scroll_state)
+                    .push(
+                        Row::new()
+                            .push(Image::new(&self.preview_image_path))
+                            .align_items(Align::Center)
+                            .width(Length::Fill),
+                    )
+                    .width(Length::Fill),
+            )
+            .padding(10)
             .into()
     }
 }
@@ -269,7 +276,7 @@ impl Application for FileCabinet {
                                         doc_pane,
                                         Box::new(PreviewPane {
                                             preview_image_path: path.clone(),
-                                            close_button: Default::default(),
+                                            ..Default::default()
                                         }),
                                     ) {
                                         // then save the preview pane.
@@ -289,7 +296,7 @@ impl Application for FileCabinet {
                                             doc_pane,
                                             Box::new(PreviewPane {
                                                 preview_image_path: path.clone(),
-                                                close_button: Default::default(),
+                                                ..Default::default()
                                             }),
                                         ) {
                                             // Update the preview pane with state.
@@ -387,7 +394,8 @@ impl Application for FileCabinet {
                     Column::new()
                         .push(title)
                         .push(target_dir_input)
-                        .push(pane_grid),
+                        .push(pane_grid)
+                        .spacing(10),
                 )
                 .width(Length::Fill)
                 .height(Length::Fill)
@@ -549,6 +557,7 @@ impl Document {
                 let checkbox = Checkbox::new(self.completed, "", DocMessage::Completed);
                 let preview = Button::new(preview_button, Text::new(&self.filename))
                     .on_press(DocMessage::OpenPreviewPane(self.path.clone(), *pane))
+                    .style(style::Button::Doc)
                     .width(Length::Fill);
                 Row::new()
                     .spacing(20)
@@ -900,7 +909,7 @@ mod style {
             container::Style {
                 background: Some(Background::Color(SURFACE)),
                 border_width: 1.0,
-                border_radius: 10.0,
+                border_radius: 5.0,
                 border_color: Color::from([0.7, 0.7, 0.7]), // light grey
                 ..Default::default()
             }
@@ -913,11 +922,22 @@ mod style {
         Destructive,
         Update,
         Cancel,
+        Doc,
     }
 
     impl button::StyleSheet for Button {
         fn active(&self) -> button::Style {
             match self {
+                Button::Doc => button::Style {
+                    text_color: Color::WHITE,
+                    background: Some(Background::Color(Color::from_rgb(
+                        181.0 / 255.0,
+                        101.0 / 255.0,
+                        29.0 / 255.0,
+                    ))), // light brown
+                    border_radius: 5.0,
+                    ..Default::default()
+                },
                 Button::Filter { selected } => {
                     if *selected {
                         button::Style {
