@@ -78,8 +78,8 @@ struct DocPane {
 }
 
 #[derive(Debug, Default)]
-struct ImagePane {
-    preview_image: String,
+struct PreviewPane {
+    preview_image_path: String,
     close_button: button::State,
 }
 
@@ -88,12 +88,12 @@ trait PaneContent {
     fn view(&mut self, pane: Pane) -> Element<Message>;
 }
 
-impl PaneContent for ImagePane {
+impl PaneContent for PreviewPane {
     fn update(&mut self, _message: Message) {}
     fn view(&mut self, pane: Pane) -> Element<'_, Message> {
         println!(
             "event=preview_pane_opened image=\"{}\"",
-            &self.preview_image
+            &self.preview_image_path
         );
         Column::new()
             .push(
@@ -104,8 +104,8 @@ impl PaneContent for ImagePane {
                         .on_press(Message::ClosePreviewPane(pane)),
                 ),
             )
-            .push(Text::new(&self.preview_image))
-            .push(Image::new(&self.preview_image))
+            .push(Text::new(&self.preview_image_path))
+            .push(Image::new(&self.preview_image_path))
             .align_items(Align::End)
             .width(Length::Fill)
             .into()
@@ -265,8 +265,8 @@ impl Application for FileCabinet {
                                     if let Some((preview_pane, _split)) = state.panes.split(
                                         pane_grid::Axis::Vertical,
                                         doc_pane,
-                                        Box::new(ImagePane {
-                                            preview_image: path.clone(),
+                                        Box::new(PreviewPane {
+                                            preview_image_path: path.clone(),
                                             close_button: Default::default(),
                                         }),
                                     ) {
@@ -285,8 +285,8 @@ impl Application for FileCabinet {
                                         if let Some((pane, _)) = state.panes.split(
                                             pane_grid::Axis::Vertical,
                                             doc_pane,
-                                            Box::new(ImagePane {
-                                                preview_image: path.clone(),
+                                            Box::new(PreviewPane {
+                                                preview_image_path: path.clone(),
                                                 close_button: Default::default(),
                                             }),
                                         ) {
@@ -308,7 +308,7 @@ impl Application for FileCabinet {
                             boxed_content.update(message.clone());
                         }
                     }
-                    Message::DocMessage(_, ref doc_message) => {
+                    Message::DocMessage(_, ref _doc_message) => {
                         for (_pane, boxed_content) in state.panes.iter_mut() {
                             boxed_content.update(message.clone());
                         }
