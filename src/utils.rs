@@ -9,6 +9,15 @@ pub struct OptDoc {
     pub(crate) page: Option<String>,
 }
 
+pub fn extension<P: AsRef<Path>>(source: P) -> String {
+    source
+        .as_ref()
+        .extension()
+        .and_then(std::ffi::OsStr::to_str)
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or(String::new())
+}
+
 // TODO: use async paths
 pub fn list_files(path: &PathBuf) -> Vec<String> {
     if !path.exists() {

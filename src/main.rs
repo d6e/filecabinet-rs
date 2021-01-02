@@ -480,9 +480,10 @@ impl Document {
             }
             TaskMessage::FinishEdition => {
                 let basename = Path::new(&self.path).parent();
+                let extension = utils::extension(&self.path);
                 let filename = format!(
-                    "{}_{}_{}_{}",
-                    &self.date, &self.institution, &self.title, &self.page
+                    "{}_{}_{}_{}.{}",
+                    &self.date, &self.institution, &self.title, &self.page, extension
                 );
                 let new_path: String = basename
                     .and_then(|p| {
@@ -493,6 +494,10 @@ impl Document {
                     })
                     .unwrap_or(filename);
                 fs::rename(&self.path, &new_path).unwrap(); // Rename file
+                println!(
+                    "event=\"Rename\" old=\"{}\" new=\"{}\"",
+                    &self.path, &new_path
+                );
                 self.path = new_path.to_string(); // Update UI doc path.
                 self.state = TaskState::Idle {
                     edit_button: button::State::new(),
