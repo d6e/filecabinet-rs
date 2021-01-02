@@ -94,18 +94,16 @@ impl PaneContent for ImagePane {
         );
         Column::new()
             .push(
-                Row::new()
-                    .push(
-                        Button::new(&mut self.close_button, Text::new("X"))
-                            .padding(10)
-                            .style(style::Button::Destructive)
-                            .on_press(Message::ClosePreviewPane(pane)),
-                    )
-                    .align_items(Align::End),
+                Row::new().push(
+                    Button::new(&mut self.close_button, Text::new("X"))
+                        .padding(10)
+                        .style(style::Button::Destructive)
+                        .on_press(Message::ClosePreviewPane(pane)),
+                ),
             )
             .push(Text::new(&self.preview_image))
             .push(Image::new(&self.preview_image))
-            .align_items(Align::Center)
+            .align_items(Align::End)
             .width(Length::Fill)
             .into()
     }
