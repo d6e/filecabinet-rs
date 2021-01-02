@@ -1,380 +1,954 @@
-#![feature(proc_macro_hygiene, decl_macro)]
-#[macro_use] extern crate rocket;
-#[macro_use] extern crate lazy_static;
-
-use rocket::request::Form;
-use rocket::State;
-use rocket_contrib::json::JsonValue;
-use rocket_contrib::templates::Template;
-use std::error::Error;
-#[allow(dead_code)]
-use std::path::{Path, PathBuf};
-
-use rocket_contrib::serve::StaticFiles;
+#[macro_use]
+extern crate lazy_static;
+use crate::utils::{parse_date, to_document};
 use chrono::{DateTime, Utc};
-use serde::Serialize;
-use std::ffi::OsStr;
-use rocket::response::Redirect;
-use regex::Regex;
-use indicatif::ProgressBar;
-use rayon::iter::{ParallelIterator, IntoParallelRefIterator};
+use iced::futures::{AsyncReadExt, AsyncWriteExt};
+use iced::widget::pane_grid::{Content, Pane};
+use iced::{
+    button, pane_grid, scrollable, text_input, Align, Application, Button, Checkbox, Column,
+    Command, Container, Element, Font, HorizontalAlignment, Image, Length, PaneGrid, Row,
+    Scrollable, Settings, Text, TextInput,
+};
+use serde::export::Formatter;
+use serde::{Deserialize, Serialize};
+use std::borrow::Borrow;
+use std::collections::linked_list::Iter;
+use std::fmt::Debug;
+use std::ops::Deref;
+use std::path::Path;
+use std::path::PathBuf;
+use std::{env, fs};
 
-mod crypto;
-mod cli;
-mod checksum;
+mod utils;
 
-#[derive(FromForm, Clone)]
-struct Document {
-    filename: String,
-    date: String,
-    institution: String,
-    name: String,
-    page: String,
-    encrypt_it: bool,
+pub fn main() -> iced::Result {
+    FileCabinet::run(Settings::default())
 }
 
-struct OptDoc {
-    date: Option<String>,
-    institution: Option<String>,
-    name: Option<String>,
-    page: Option<String>,
+enum FileCabinet {
+    Loading,
+    Loaded(State),
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let config = cli::get_program_input();
-    if config.verify {
-        let files: Vec<PathBuf> = Path::new(&config.target_directory)
-            .read_dir()
-            .expect("read_dir call failed")
-            .map(|x| x.unwrap().path())
-            .filter(|x| Path::new(x).is_file())
-            .collect();
+struct State {
+    target_dir_state: text_input::State,
+    target_dir: String,
+    panes: pane_grid::State<Box<dyn PaneContent>>,
+    doc_pane: Option<Pane>,
+    preview_pane: Option<Pane>,
+    preview_image: String,
+    dirty: bool,
+    saving: bool,
+}
 
-        let not_checksum_files: Vec<&PathBuf> = files.iter()
-            .filter(|x| {
-                    x.extension().unwrap_or(OsStr::new("")) != "sha256"
-            })
-            .collect();
-
-        let checksum_files: Vec<&PathBuf> = files.iter()
-            .filter(|x| {
-                    x.extension().unwrap_or(OsStr::new("")) == "sha256"
-            })
-            .collect();
-
-        let missing_checksum: Vec<String> = not_checksum_files.iter()
-            .filter(|path| {
-                // Check if corresponding checksum is available.
-                let mut p: PathBuf = (**path).to_owned();
-                let mut ext = p.extension().unwrap_or(OsStr::new("")).to_owned();
-                ext.push(".sha256");
-                p.set_extension(ext);
-                ! checksum_files.contains(&&p)
-            })
-            .map(|p| p.to_str().unwrap().to_owned())
-            .collect();
-
-        let results: Vec<bool> = checksum_files.par_iter()
-            .map( |c| {
-                let is_valid = checksum::validate_sha256(c).unwrap();
-                println!("Validating \"{}\"... {}", c.to_str().unwrap(), if is_valid {"OK"} else {"FAILED"});
-                is_valid
-            })
-            .collect();
-
-        let successes = results.iter()
-            .filter(|is_valid| **is_valid)
-            .count();
-
-        let failures = results.iter()
-            .filter(|is_valid| !*is_valid)
-            .count();
-
-        println!("--------------------");
-        println!("Successes: {}", successes);
-        println!("Failures: {}", failures);
-        println!("Missing checksums: {}", missing_checksum.join("\n    "));
-        std::process::exit(0);
+impl Default for State {
+    fn default() -> Self {
+        let (pane_state, pane) =
+            pane_grid::State::new(Box::new(DocPane::default()) as Box<dyn PaneContent>);
+        State {
+            target_dir_state: Default::default(),
+            target_dir: "".to_string(),
+            panes: pane_state,
+            doc_pane: Some(pane),
+            preview_pane: None,
+            preview_image: "".to_string(),
+            dirty: false,
+            saving: false,
+        }
     }
+}
 
-    // If there's a specific file we should decrypt, do that.
-    if let Some(paths) = &config.file_to_decrypt {
-        let pass = &config.password.clone().unwrap();
-        let included: Vec<String> = paths.iter().filter(|p| p.ends_with(crypto::ENCRYPTION_FILE_EXT)).map(String::to_string).collect();
-        let excluded: Vec<String> = paths.iter().filter(|p| {! p.ends_with(crypto::ENCRYPTION_FILE_EXT)}).map(String::to_string).collect();
-        let pb = ProgressBar::new(included.len() as u64);
-        pb.set_position(0); // Start drawing progress bar
-        included.par_iter().map(|path| {
-            match crypto::decrypt_file(path, pass) {
-                Err(s) => pb.println(format!("ERROR {}", s)),
-                Ok(_) => pb.println(format!("Decrypted {}", path))
+#[derive(Debug, Clone)]
+enum Message {
+    Loaded(Result<SavedState, LoadError>),
+    Saved(Result<(), SaveError>),
+    PathChanged(String),
+    FilterChanged(Filter),
+    TaskMessage(usize, TaskMessage),
+    ClosePreviewPane(Pane),
+}
+
+#[derive(Debug, Default)]
+struct DocPane {
+    scroll: scrollable::State,
+
+    filter: Filter,
+    controls: Controls,
+    docs: Vec<Document>,
+}
+
+#[derive(Debug, Default)]
+struct ImagePane {
+    preview_image: String,
+    close_button: button::State,
+}
+
+trait PaneContent {
+    fn update(&mut self, message: Message);
+    fn view(&mut self, pane: Pane) -> Element<Message>;
+}
+
+impl PaneContent for ImagePane {
+    fn update(&mut self, message: Message) {}
+    fn view(&mut self, pane: Pane) -> Element<'_, Message> {
+        println!(
+            "event=preview_pane_opened image=\"{}\"",
+            &self.preview_image
+        );
+        Column::new()
+            .push(
+                Row::new().push(
+                    Button::new(&mut self.close_button, Text::new("X"))
+                        .padding(10)
+                        .style(style::Button::Destructive)
+                        .on_press(Message::ClosePreviewPane(pane)),
+                ),
+            )
+            .push(Text::new(&self.preview_image))
+            .push(Image::new(&self.preview_image))
+            .align_items(Align::End)
+            .width(Length::Fill)
+            .into()
+    }
+}
+
+impl PaneContent for DocPane {
+    fn update(&mut self, message: Message) {
+        match message {
+            Message::Loaded(_) => {}
+            Message::Saved(_) => {}
+            Message::PathChanged(value) => {
+                let dir_path = Path::new(&value).to_path_buf();
+                self.docs = utils::list_files(&dir_path)
+                    .iter()
+                    .map(|path| {
+                        let mut full_path = dir_path.clone();
+                        full_path.push(path);
+                        Document::new(full_path.to_str().unwrap().to_string())
+                    })
+                    .collect();
             }
-            pb.inc(1);
-        }).collect::<Vec<_>>();
-        pb.finish();
-        let bullet_pt = "\n    ";
-        println!("Successfully decrypted files:{}{}", bullet_pt, included.join(bullet_pt));
-        println!("Ignored:{}{}", bullet_pt, excluded.join(bullet_pt));
-        std::process::exit(0);
-    }
-
-    // If there's a specific file we should encrypt, do that too.
-    if let Some(paths) = &config.file_to_encrypt {
-        let pass = &config.password.clone().unwrap();
-        let exclude_files = |p: &str| { p.ends_with(crypto::ENCRYPTION_FILE_EXT) || p.ends_with(".sha256")};
-        let included: Vec<String> = paths.iter().filter(|p| {! exclude_files(p)} ).map(String::to_string).collect();
-        let excluded: Vec<String> = paths.iter().filter(|p| exclude_files(p)).map(String::to_string).collect();
-        let pb = ProgressBar::new(included.len() as u64);
-        pb.set_position(0); // Start drawing progress bar
-        included.par_iter().map(|path| {
-            let target = crypto::get_encrypted_name(path);
-            match crypto::encrypt_file(path, target, pass) {
-                Err(s) => pb.println(format!("ERROR {}", s)),
-                Ok(_) => {
-                    pb.println(format!("Encrypted {}", path));
-                    checksum::generate_sha256(Path::new(path).to_path_buf()).unwrap();
+            Message::FilterChanged(filter) => {
+                self.filter = filter;
+            }
+            Message::TaskMessage(i, TaskMessage::Delete) => {
+                self.docs.remove(i);
+            }
+            Message::TaskMessage(i, task_message) => {
+                if let Some(doc) = self.docs.get_mut(i) {
+                    doc.update(task_message);
                 }
             }
-            pb.inc(1);
-        }).collect::<Vec<_>>();
-        pb.finish();
-        let bullet_pt = "\n    ";
-        println!("Successfully encrypted files:{}{}", bullet_pt, included.join(bullet_pt));
-        println!("Ignored:{}{}", bullet_pt, excluded.join(bullet_pt));
-        std::process::exit(0);
+            _ => {}
+        }
     }
 
-    if let Some(paths) = &config.normalize {
-        paths.iter()
-            .map(Path::new)
-            .filter(|p| p.is_file())
-            .map(|source| {
-                let doc: OptDoc = to_document(source);
-                let extension: String = source.extension()
-                    .and_then(std::ffi::OsStr::to_str)
-                    .map(|s| s.to_ascii_lowercase())
-                    .unwrap_or(String::new());
-                println!("\tParsing {:?}", source);
-                let target = Path::new(&config.target_directory)
-                    .join(format!("{}_{}_{}_{}.{}",
-                        doc.date.expect("date error"),
-                        doc.institution.expect("institution error"),
-                        doc.name.expect("name error"),
-                        doc.page.unwrap_or("1".to_owned()),
-                        extension));
-                (source, target)
+    fn view(&mut self, pane: Pane) -> Element<Message> {
+        let DocPane {
+            docs,
+            filter,
+            controls,
+            ..
+        } = self;
+
+        let controls = controls.view(&docs, *filter);
+        let filtered_tasks = docs.iter().filter(|doc| filter.matches(doc));
+
+        let docs: Element<_> = if filtered_tasks.count() > 0 {
+            docs.iter_mut()
+                .enumerate()
+                .filter(|(_, doc)| filter.matches(doc))
+                .fold(Column::new().spacing(20), |column, (i, doc)| {
+                    column.push(
+                        doc.view(&pane)
+                            .map(move |message| Message::TaskMessage(i, message)),
+                    )
+                })
+                .into()
+        } else {
+            empty_message(match filter {
+                Filter::All => "No files found...",
+                Filter::Normalized => "",
+                Filter::Unnormalized => "",
             })
-            .filter(|(s, t)| s != t)
-            .for_each(|(source, target)| {
-                println!("Renaming {:?} to {:?}", source, target);
-                std::fs::rename(source, target).unwrap();
+        };
+
+        let content = Column::new()
+            .max_width(800)
+            .spacing(20)
+            .push(controls)
+            .push(docs);
+
+        Scrollable::new(&mut self.scroll)
+            .padding(40)
+            .push(Container::new(content).width(Length::Fill).center_x())
+            .into()
+    }
+}
+
+impl Application for FileCabinet {
+    type Executor = iced::executor::Default;
+    type Message = Message;
+    type Flags = ();
+
+    fn new(_flags: ()) -> (FileCabinet, Command<Message>) {
+        (
+            FileCabinet::Loading,
+            Command::perform(SavedState::load(), Message::Loaded),
+        )
+    }
+
+    fn title(&self) -> String {
+        let dirty = match self {
+            FileCabinet::Loading => false,
+            FileCabinet::Loaded(state) => state.dirty,
+        };
+
+        format!("Filecabinet {}", if dirty { "*" } else { "" })
+    }
+
+    fn update(&mut self, message: Message) -> Command<Message> {
+        match self {
+            FileCabinet::Loading => {
+                match message {
+                    Message::Loaded(Ok(saved_state)) => {
+                        // Create the panes so that the documents are loaded on launch.
+                        let (mut pane_state, pane) = pane_grid::State::new(Box::new(
+                            DocPane::default(),
+                        )
+                            as Box<dyn PaneContent>);
+                        // Pass the path to each doc_pane doc so it can render.
+                        for (pane, boxed_content) in pane_state.iter_mut() {
+                            boxed_content
+                                .update(Message::PathChanged(saved_state.target_dir.clone()));
+                        }
+                        *self = FileCabinet::Loaded(State {
+                            target_dir: saved_state.target_dir,
+                            panes: pane_state,
+                            doc_pane: Some(pane),
+                            ..Default::default()
+                        });
+                    }
+                    Message::Loaded(Err(_)) => {
+                        *self = FileCabinet::Loaded(State::default());
+                    }
+                    _ => {}
+                }
+
+                Command::none()
+            }
+            FileCabinet::Loaded(state) => {
+                println!("loaded");
+                let mut saved = false;
+
+                match message {
+                    Message::PathChanged(ref value) => {
+                        state.target_dir = value.clone();
+                        for (pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(message.clone());
+                        }
+                    }
+                    Message::FilterChanged(filter) => {
+                        for (pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(message.clone());
+                        }
+                    }
+                    Message::ClosePreviewPane(pane) => {
+                        state.panes.close(&pane);
+                        state.preview_pane = Default::default();
+                    }
+                    Message::TaskMessage(_, TaskMessage::OpenPreviewPane(path, _)) => {
+                        if let Some(doc_pane) = &state.doc_pane {
+                            match state.preview_pane {
+                                None => {
+                                    println!("Preview pane closed, opening for the first time");
+                                    // If the preview pane isn't open, open it,
+                                    if let Some((preview_pane, split)) = state.panes.split(
+                                        pane_grid::Axis::Vertical,
+                                        doc_pane,
+                                        Box::new(ImagePane {
+                                            preview_image: path.clone(),
+                                            close_button: Default::default(),
+                                        }),
+                                    ) {
+                                        // then save the preview pane.
+                                        state.preview_pane = Some(preview_pane);
+                                        state.preview_image = path;
+                                    }
+                                }
+                                Some(preview_pane) => {
+                                    println!("Preview pane open, closing and reopening new one...");
+                                    if state.preview_image != path {
+                                        println!("Preview pane image is the same path, refusing to open.");
+                                        // If the preview pane is open, close it,
+                                        state.panes.close(&preview_pane);
+                                        // then open the new one.
+                                        if let Some((pane, _)) = state.panes.split(
+                                            pane_grid::Axis::Vertical,
+                                            doc_pane,
+                                            Box::new(ImagePane {
+                                                preview_image: path.clone(),
+                                                close_button: Default::default(),
+                                            }),
+                                        ) {
+                                            // Update the preview pane with state.
+                                            state.preview_pane = Some(pane);
+                                            state.preview_image = path;
+                                        } else {
+                                            // If fails, unset the preview pane.
+                                            state.preview_pane = None;
+                                            state.preview_image = String::new();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Message::TaskMessage(_, TaskMessage::Delete) => {
+                        for (pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(message.clone());
+                        }
+                    }
+                    Message::TaskMessage(i, ref task_message) => {
+                        for (pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(message.clone());
+                        }
+                    }
+                    Message::Saved(_) => {
+                        state.saving = false;
+                        saved = true;
+                    }
+                    _ => {}
+                }
+
+                if !saved {
+                    state.dirty = true;
+                }
+
+                if state.dirty && !state.saving {
+                    state.dirty = false;
+                    state.saving = true;
+
+                    Command::perform(
+                        SavedState {
+                            target_dir: state.target_dir.clone(),
+                            // filter: state.filter,
+                            // docs: state.docs.clone(),
+                        }
+                        .save(),
+                        Message::Saved,
+                    )
+                    // Command::none()
+                } else {
+                    Command::none()
+                }
+            }
+        }
+    }
+
+    fn view(&mut self) -> Element<Message> {
+        match self {
+            FileCabinet::Loading => loading_message(),
+            FileCabinet::Loaded(state) => {
+                let pane_grid = PaneGrid::new(&mut state.panes, |pane, content| {
+                    // let is_focused = focus == Some(pane);
+
+                    // .title_bar(title_bar)
+                    // .style(style::Pane { is_focused })
+                    let c: Element<Message> = Container::new(content.view(pane)).into();
+                    pane_grid::Content::new(c)
+                })
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .spacing(10);
+                // .on_click(Message::Clicked)
+                // .on_drag(Message::Dragged)
+                // .on_resize(10, Message::Resized);
+
+                let title = Text::new("filecabinet")
+                    .width(Length::Fill)
+                    .size(80)
+                    .color([0.5, 0.5, 0.5])
+                    .horizontal_alignment(HorizontalAlignment::Center);
+
+                let target_dir_input = TextInput::new(
+                    &mut state.target_dir_state,
+                    "Specify path to documents",
+                    &*state.target_dir,
+                    Message::PathChanged,
+                )
+                .padding(10)
+                .size(16);
+
+                Container::new(
+                    Column::new()
+                        .push(title)
+                        .push(target_dir_input)
+                        .push(pane_grid),
+                )
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .padding(10)
+                .into()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Document {
+    path: String,
+    date: String,
+    institution: String,
+    title: String,
+    page: String,
+    completed: bool,  // TODO remove
+    encrypt_it: bool, // TODO remove
+
+    #[serde(skip)]
+    state: TaskState,
+}
+
+#[derive(Debug, Clone)]
+pub enum TaskState {
+    Idle {
+        edit_button: button::State,
+        preview_button: button::State,
+    },
+    Editing {
+        date_input: text_input::State,
+        institution_input: text_input::State,
+        title_input: text_input::State,
+        page_input: text_input::State,
+        delete_button: button::State,
+        cancel_button: button::State,
+        submit_button: button::State,
+    },
+}
+
+impl Default for TaskState {
+    fn default() -> Self {
+        TaskState::Idle {
+            edit_button: button::State::new(),
+            preview_button: button::State::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum TaskMessage {
+    Completed(bool),
+    Edit,
+    DateEdited(String),
+    InstitutionEdited(String),
+    TitleEdited(String),
+    PageEdited(String),
+    FinishEdition,
+    Delete,
+    Cancel,
+    OpenPreviewPane(String, Pane),
+}
+
+impl Document {
+    fn new(path: String) -> Self {
+        let options = to_document(&path);
+        let now: DateTime<Utc> = Utc::now();
+        Document {
+            path,
+            date: options.date.unwrap_or(now.format("%Y-%m-%d").to_string()),
+            institution: options.institution.unwrap_or(String::new()),
+            title: options.name.unwrap_or(String::new()),
+            page: options.page.unwrap_or(String::from("1")).parse().unwrap(),
+            completed: false,
+            encrypt_it: false,
+            state: TaskState::default(),
+        }
+    }
+
+    fn update(&mut self, message: TaskMessage) {
+        match message {
+            TaskMessage::Completed(completed) => {
+                self.completed = completed;
+            }
+            TaskMessage::Edit => {
+                self.state = TaskState::Editing {
+                    date_input: Default::default(),
+                    institution_input: Default::default(),
+                    title_input: Default::default(),
+                    page_input: Default::default(),
+                    delete_button: button::State::new(),
+                    cancel_button: button::State::new(),
+                    submit_button: button::State::new(),
+                };
+            }
+            TaskMessage::Cancel => {
+                self.state = TaskState::Idle {
+                    edit_button: button::State::new(),
+                    preview_button: button::State::new(),
+                }
+            }
+            TaskMessage::FinishEdition => {
+                let basename = Path::new(&self.path).parent();
+                let extension = utils::extension(&self.path);
+                let filename = format!(
+                    "{}_{}_{}_{}.{}",
+                    &self.date, &self.institution, &self.title, &self.page, extension
+                );
+                let new_path: String = basename
+                    .and_then(|p| {
+                        // basename is a valid directory, add it and return.
+                        let mut pb = p.to_path_buf();
+                        pb.push(&filename);
+                        pb.to_str().map(|s| s.to_string())
+                    })
+                    .unwrap_or(filename);
+                fs::rename(&self.path, &new_path).unwrap(); // Rename file
+                println!(
+                    "event=\"Rename\" old=\"{}\" new=\"{}\"",
+                    &self.path, &new_path
+                );
+                self.path = new_path.to_string(); // Update UI doc path.
+                self.state = TaskState::Idle {
+                    edit_button: button::State::new(),
+                    preview_button: button::State::new(),
+                }
+            }
+            TaskMessage::Delete => {}
+            TaskMessage::DateEdited(s) => {
+                self.date = s;
+            }
+            TaskMessage::InstitutionEdited(s) => {
+                self.institution = s;
+            }
+            TaskMessage::PageEdited(s) => {
+                self.page = s;
+            }
+            TaskMessage::TitleEdited(s) => {
+                self.title = s;
+            }
+            _ => {}
+        }
+    }
+
+    fn view(&mut self, pane: &Pane) -> Element<TaskMessage> {
+        match &mut self.state {
+            TaskState::Idle {
+                preview_button,
+                edit_button,
+            } => {
+                let checkbox = Checkbox::new(self.completed, "", TaskMessage::Completed);
+                let preview = Button::new(preview_button, Text::new(&self.path))
+                    .on_press(TaskMessage::OpenPreviewPane(self.path.clone(), *pane))
+                    .width(Length::Fill);
+                Row::new()
+                    .spacing(20)
+                    .align_items(Align::Center)
+                    .push(checkbox)
+                    .push(preview)
+                    .push(
+                        Button::new(edit_button, edit_icon())
+                            .on_press(TaskMessage::Edit)
+                            .padding(10)
+                            .style(style::Button::Icon),
+                    )
+                    .into()
+            }
+            TaskState::Editing {
+                date_input,
+                institution_input,
+                title_input,
+                page_input,
+                delete_button,
+                cancel_button,
+                submit_button,
+            } => {
+                Column::new()
+                    .spacing(10)
+                    .push(Text::new(&self.path))
+                    .push(
+                        TextInput::new(date_input, "Date", &self.date, TaskMessage::DateEdited)
+                            .on_submit(TaskMessage::FinishEdition)
+                            .padding(10),
+                    )
+                    .push(
+                        TextInput::new(
+                            institution_input,
+                            "Institution",
+                            &self.institution,
+                            TaskMessage::InstitutionEdited,
+                        )
+                        .on_submit(TaskMessage::FinishEdition)
+                        .padding(10),
+                    )
+                    .push(
+                        TextInput::new(title_input, "Title", &self.title, TaskMessage::TitleEdited)
+                            .on_submit(TaskMessage::FinishEdition)
+                            .padding(10),
+                    )
+                    .push(
+                        TextInput::new(page_input, "Page", &self.page, TaskMessage::PageEdited)
+                            .on_submit(TaskMessage::FinishEdition)
+                            .padding(10),
+                    )
+                    .push(
+                        Row::new()
+                            .spacing(10)
+                            .push(
+                                Button::new(
+                                    submit_button,
+                                    Row::new().spacing(10).push(Text::new("Submit")),
+                                )
+                                .on_press(TaskMessage::FinishEdition)
+                                .padding(10)
+                                .style(style::Button::Update),
+                            )
+                            // Delete Button
+                            .push(
+                                Button::new(
+                                    delete_button,
+                                    Row::new()
+                                        .spacing(10)
+                                        .push(delete_icon())
+                                        .push(Text::new("Delete")),
+                                )
+                                .on_press(TaskMessage::Delete)
+                                .padding(10)
+                                .style(style::Button::Destructive),
+                            )
+                            // Cancel Button
+                            .push(
+                                Button::new(
+                                    cancel_button,
+                                    Row::new().spacing(10).push(Text::new("Cancel")),
+                                )
+                                .on_press(TaskMessage::Cancel)
+                                .padding(10)
+                                .style(style::Button::Cancel),
+                            ),
+                    )
+                    .into()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct Controls {
+    all_button: button::State,
+    active_button: button::State,
+    completed_button: button::State,
+}
+
+impl Controls {
+    fn view(&mut self, tasks: &[Document], current_filter: Filter) -> Row<Message> {
+        let Controls {
+            all_button,
+            active_button,
+            completed_button,
+        } = self;
+
+        let tasks_left = tasks.iter().filter(|task| !task.completed).count();
+
+        let filter_button = |state, label, filter, current_filter| {
+            let label = Text::new(label).size(16);
+            let button = Button::new(state, label).style(style::Button::Filter {
+                selected: filter == current_filter,
             });
 
-        std::process::exit(0);
+            button.on_press(Message::FilterChanged(filter)).padding(8)
+        };
+
+        Row::new()
+            .spacing(20)
+            .align_items(Align::Center)
+            .push(
+                Text::new(&format!(
+                    "{} {} found",
+                    tasks_left,
+                    if tasks_left == 1 { "doc" } else { "docs" }
+                ))
+                .width(Length::Fill)
+                .size(16),
+            )
+            .push(
+                Row::new()
+                    .width(Length::Shrink)
+                    .spacing(10)
+                    .push(filter_button(
+                        all_button,
+                        "All",
+                        Filter::All,
+                        current_filter,
+                    ))
+                    .push(filter_button(
+                        active_button,
+                        "Normalized",
+                        Filter::Normalized,
+                        current_filter,
+                    ))
+                    .push(filter_button(
+                        completed_button,
+                        "Unnormalized",
+                        Filter::Unnormalized,
+                        current_filter,
+                    )),
+            )
     }
+}
 
-    if config.launch_web {
-        rocket::ignite()
-            .mount("/node_modules", StaticFiles::from("node_modules"))
-            .mount("/static", StaticFiles::from("static"))
-            .mount("/documents", StaticFiles::from("documents"))
-            .mount("/", routes![index, get_docs, get_doc, new])
-            .manage(config)
-            .attach(Template::fairing())
-            .launch();
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Filter {
+    All,
+    Normalized,
+    Unnormalized,
+}
+
+impl Default for Filter {
+    fn default() -> Self {
+        Filter::All
     }
-    Ok(())
 }
 
-#[derive(Serialize, Debug)]
-struct Context {
-  filename: String,
-  name: String,
-  date: String,
-  institution: String,
-  files: Vec<String>,
-  target_directory: String,
-  page: String
-}
-
-#[get("/")]
-fn index(config: State<cli::Config>) -> Template {
-    get_doc(config, String::new())
-}
-
-#[get("/doc")]
-fn get_docs(config: State<cli::Config>) -> JsonValue {
-    println!("GET /doc -- listing files in '{}'", &config.target_directory);
-    let mut docs = list_files(&PathBuf::from(&config.target_directory));
-    docs.sort();
-    JsonValue(serde_json::json!(docs))
-}
-
-#[get("/doc/<filename>")]
-fn get_doc(config: State<cli::Config>, filename: String) -> Template {
-    let now: DateTime<Utc> = Utc::now();
-    let mut files: Vec<String> = list_files(&PathBuf::from(&config.target_directory));
-    files.sort();
-    if filename.ends_with(crypto::ENCRYPTION_FILE_EXT) {
-        // If file is encrypted, decrypt to temporary dir and return new file
-        let path = Path::new(&config.target_directory).join(filename.clone());
-        let pass = config.password.clone().unwrap();
-        if let Err(e) = crypto::decrypt_file(path.to_str().unwrap(), &pass) {
-            // TODO: Return appropriate HTTP error in response.
+impl Filter {
+    fn matches(&self, doc: &Document) -> bool {
+        match self {
+            Filter::All => true,
+            Filter::Normalized => !doc.completed,
+            Filter::Unnormalized => doc.completed,
         }
-        let unencrypted_path: PathBuf = crypto::get_decrypted_name(path);
-        let unencrypted_name = unencrypted_path.file_name().unwrap().to_str().unwrap();
-        let date = parse_date(&unencrypted_name).unwrap();
-        let doc = to_document(&unencrypted_path.to_str().unwrap());
-
-        let target_directory = unencrypted_path.parent().unwrap().to_str().unwrap().to_owned().replace("/", "\\u{002F}");
-        let new_context = Context {
-            filename: unencrypted_name.to_string(),
-            name: doc.name.unwrap_or(String::new()),
-            date: doc.date.unwrap_or(date),
-            institution: doc.institution.unwrap_or(String::new()),
-            page: doc.page.unwrap_or(String::from("1")),
-            files: files,
-            target_directory: target_directory
-        };
-        return Template::render("index", &new_context);
-    } else {
-        let date = parse_date(&filename.as_ref()).unwrap_or(now.format("%Y-%m-%d").to_string());
-        let doc = to_document(&filename);
-        let context = Context {
-            filename: filename,
-            name: doc.name.unwrap_or(String::new()),
-            date: doc.date.unwrap_or(date),
-            institution: doc.institution.unwrap_or(String::new()),
-            page: doc.page.unwrap_or(String::from("1")),
-            files: files,
-            target_directory: config.target_directory.clone()
-        };
-        return Template::render("index", &context);
     }
 }
 
-#[post("/doc", data = "<doc>")]
-fn new(config: State<cli::Config>, doc: Form<Document>) -> Result<Redirect, Box<dyn Error>> {
-    if doc.encrypt_it {
-        let filename = Path::new(&config.target_directory)
-            .join(format!("{}_{}_{}_{}.cocoon", doc.date, doc.institution, doc.name, doc.page));
-        let checksum_name = filename.clone();
-        let password = config.password.clone().unwrap();
-        let source = Path::new(&config.target_directory).join(&doc.filename);
-        crypto::encrypt_file(source, filename, &password)?;
-        checksum::generate_sha256(checksum_name).unwrap();
-    } else {
-        // Normalize the filename
-        let source = Path::new(&config.target_directory).join(&doc.filename);
-        let extension: String = source.extension()
-            .and_then(std::ffi::OsStr::to_str)
-            .map(|s| s.to_ascii_lowercase())
-            .unwrap_or(String::new());
-        let target = Path::new(&config.target_directory)
-            .join(format!("{}_{}_{}_{}.{}", doc.date, doc.institution, doc.name, doc.page, extension));
-        std::fs::rename(source, target)?;
-    }
-    Ok(Redirect::to("/"))
-}
-
-fn list_files(path: &PathBuf) -> Vec<String> {
-    if !path.exists() {
-        return Vec::new();
-    }
-    path.read_dir()
-        .expect("read_dir call failed")
-        .map(|x| x.unwrap().path())
-        .filter(|x| Path::new(x).is_file())
-        .filter(|x| {
-                let ext: String = x.extension()
-                    .and_then(std::ffi::OsStr::to_str)
-                    .map(|s| s.to_ascii_lowercase())
-                    .unwrap_or(String::new());
-                ext == "pdf" ||
-                ext == "jpg" ||
-                ext == "png" ||
-                ext == "cocoon"
-            })
-        .map(|x| x.file_name().unwrap().to_str().unwrap().to_owned())
-        .collect()
-}
-
-lazy_static! {
-    static ref RE_WITH_HYPHENS: Regex = Regex::new(r"^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})").unwrap();
-    static ref RE_NO_HYPHENS: Regex = Regex::new(r"^(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})").unwrap();
-    static ref RE_YEAR_ONLY: Regex = Regex::new(r"^(?P<year>\d{4})").unwrap();
-}
-
-fn parse_date(text: &&str) -> Option<String> {
-    // Returns the parsed date in ISO8601 format
-    RE_WITH_HYPHENS.captures(text).map(|x|
-        format!("{}-{}-{}",
-            x.name("year").unwrap().as_str(),
-            x.name("month").unwrap().as_str(),
-            x.name("day").unwrap().as_str(),
-        )
-    ).or(
-        RE_NO_HYPHENS.captures(text).map(|x|
-            format!("{}-{}-{}",
-                x.name("year").unwrap().as_str(),
-                x.name("month").unwrap().as_str(),
-                x.name("day").unwrap().as_str(),
-            )
-        )
-    ).or(
-        RE_YEAR_ONLY.captures(text).map(|x|
-            format!("{}-{}-{}",
-                x.name("year").unwrap().as_str(),
-                x.name("month").map(|m|m.as_str()).unwrap_or("01"),
-                x.name("day").map(|m|m.as_str()).unwrap_or("01"),
-            )
-        )
+fn loading_message<'a>() -> Element<'a, Message> {
+    Container::new(
+        Text::new("Loading...")
+            .horizontal_alignment(HorizontalAlignment::Center)
+            .size(50),
     )
+    .width(Length::Fill)
+    .height(Length::Fill)
+    .center_y()
+    .into()
 }
 
-lazy_static! {
-    static ref RE_PARSE_PAGE: Regex = Regex::new(r"(\d+)").unwrap();
+fn empty_message<'a>(message: &str) -> Element<'a, Message> {
+    Container::new(
+        Text::new(message)
+            .width(Length::Fill)
+            .size(25)
+            .horizontal_alignment(HorizontalAlignment::Center)
+            .color([0.7, 0.7, 0.7]),
+    )
+    .width(Length::Fill)
+    .height(Length::Units(200))
+    .center_y()
+    .into()
 }
 
-fn parse_page(text: &&str) -> Option<String> {
-    RE_PARSE_PAGE.captures(text).and_then(|c| c.get(1)).map(|m| m.as_str().to_owned())
+// Fonts
+const ICONS: Font = Font::External {
+    name: "Icons",
+    bytes: include_bytes!("../fonts/icons.ttf"),
+};
+
+fn icon(unicode: char) -> Text {
+    Text::new(&unicode.to_string())
+        .font(ICONS)
+        .width(Length::Units(20))
+        .horizontal_alignment(HorizontalAlignment::Center)
+        .size(20)
 }
 
-#[test]
-fn test_parse_page() {
-    assert_eq!(parse_page(&""), None);
-    assert_eq!(parse_page(&"pg"), None);
-    assert_eq!(parse_page(&"01"), Some("01".to_owned()));
-    assert_eq!(parse_page(&"20"), Some("20".to_owned()));
-    assert_eq!(parse_page(&"pg20"), Some("20".to_owned()));
+fn edit_icon() -> Text {
+    icon('\u{F303}')
 }
 
-fn to_document<T: AsRef<Path>>(filename: T) -> OptDoc {
-    let filename = filename.as_ref();
-    let filestem: &str = filename.file_stem()
-        .and_then(OsStr::to_str)
-        .unwrap_or(filename.to_str().unwrap());
-    let v: Vec<&str> = filestem.split('_').collect();
-    OptDoc {
-        date: v.get(0).and_then(parse_date),
-        institution: v.get(1).map(|x| x.to_string()),
-        name: v.get(2).map(|x| x.to_string()),
-        page: v.get(3).and_then(parse_page),
+fn delete_icon() -> Text {
+    icon('\u{F1F8}')
+}
+
+// Persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SavedState {
+    target_dir: String,
+}
+
+#[derive(Debug, Clone)]
+enum LoadError {
+    FileError,
+    FormatError,
+}
+
+#[derive(Debug, Clone)]
+enum SaveError {
+    DirectoryError,
+    FileError,
+    WriteError,
+    FormatError,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl SavedState {
+    fn path() -> std::path::PathBuf {
+        let mut path = if let Some(project_dirs) =
+            directories_next::ProjectDirs::from("rs", "d6e", "filecabinet")
+        {
+            project_dirs.data_dir().into()
+        } else {
+            std::env::current_dir().unwrap_or(std::path::PathBuf::new())
+        };
+
+        path.push("filecabinet.json");
+
+        path
+    }
+
+    async fn load() -> Result<SavedState, LoadError> {
+        use async_std::prelude::*;
+
+        let mut contents = String::new();
+
+        let mut file = async_std::fs::File::open(Self::path())
+            .await
+            .map_err(|_| LoadError::FileError)?;
+
+        AsyncReadExt::read_to_string(&mut file, &mut contents)
+            .await
+            .map_err(|_| LoadError::FileError)?;
+
+        serde_json::from_str(&contents).map_err(|_| LoadError::FormatError)
+    }
+
+    async fn save(self) -> Result<(), SaveError> {
+        use async_std::prelude::*;
+
+        let json = serde_json::to_string_pretty(&self).map_err(|_| SaveError::FormatError)?;
+
+        let path = Self::path();
+
+        if let Some(dir) = path.parent() {
+            async_std::fs::create_dir_all(dir)
+                .await
+                .map_err(|_| SaveError::DirectoryError)?;
+        }
+
+        {
+            let mut file = async_std::fs::File::create(path)
+                .await
+                .map_err(|_| SaveError::FileError)?;
+
+            AsyncWriteExt::write_all(&mut file, json.as_bytes())
+                .await
+                .map_err(|_| SaveError::WriteError)?;
+        }
+
+        // This is a simple way to save at most once every couple seconds
+        async_std::task::sleep(std::time::Duration::from_secs(2)).await;
+
+        Ok(())
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+impl SavedState {
+    fn storage() -> Option<web_sys::Storage> {
+        let window = web_sys::window()?;
 
-#[test]
-fn test_parse_date_hyphens() {
-    assert_eq!(parse_date(&"2020-04-03_boop_loop"), Some("2020-04-03".to_string()))
+        window.local_storage().ok()?
+    }
+
+    async fn load() -> Result<SavedState, LoadError> {
+        let storage = Self::storage().ok_or(LoadError::FileError)?;
+
+        let contents = storage
+            .get_item("state")
+            .map_err(|_| LoadError::FileError)?
+            .ok_or(LoadError::FileError)?;
+
+        serde_json::from_str(&contents).map_err(|_| LoadError::FormatError)
+    }
+
+    async fn save(self) -> Result<(), SaveError> {
+        let storage = Self::storage().ok_or(SaveError::FileError)?;
+
+        let json = serde_json::to_string_pretty(&self).map_err(|_| SaveError::FormatError)?;
+
+        storage
+            .set_item("state", &json)
+            .map_err(|_| SaveError::WriteError)?;
+
+        let _ = wasm_timer::Delay::new(std::time::Duration::from_secs(2)).await;
+
+        Ok(())
+    }
 }
 
-#[test]
-fn test_parse_date_no_hyphens() {
-    assert_eq!(parse_date(&"20180530_boop_loop"), Some("2018-05-30".to_string()))
-}
-#[test]
-fn test_parse_date_year_only() {
-    assert_eq!(parse_date(&"2018_boop_loop"), Some("2018-01-01".to_string()))
+mod style {
+    use iced::{button, Background, Color, Vector};
+
+    pub enum Button {
+        Filter { selected: bool },
+        Icon,
+        Destructive,
+        Update,
+        Cancel,
+    }
+
+    impl button::StyleSheet for Button {
+        fn active(&self) -> button::Style {
+            match self {
+                Button::Filter { selected } => {
+                    if *selected {
+                        button::Style {
+                            background: Some(Background::Color(Color::from_rgb(0.2, 0.2, 0.7))),
+                            border_radius: 10.0,
+                            text_color: Color::WHITE,
+                            ..button::Style::default()
+                        }
+                    } else {
+                        button::Style::default()
+                    }
+                }
+                Button::Icon => button::Style {
+                    text_color: Color::from_rgb(0.5, 0.5, 0.5),
+                    ..button::Style::default()
+                },
+                Button::Destructive => button::Style {
+                    background: Some(Background::Color(Color::from_rgb(0.8, 0.2, 0.2))),
+                    border_radius: 5.0,
+                    text_color: Color::WHITE,
+                    shadow_offset: Vector::new(1.0, 1.0),
+                    ..button::Style::default()
+                },
+                Button::Update => button::Style {
+                    background: Some(Background::Color(Color::from_rgb(0.467, 0.867, 0.467))),
+                    border_radius: 5.0,
+                    text_color: Color::WHITE,
+                    shadow_offset: Vector::new(1.0, 1.0),
+                    ..button::Style::default()
+                },
+                Button::Cancel => button::Style {
+                    background: Some(Background::Color(Color::from_rgb(0.2, 0.2, 0.2))),
+                    border_radius: 5.0,
+                    text_color: Color::WHITE,
+                    shadow_offset: Vector::new(1.0, 1.0),
+                    ..button::Style::default()
+                },
+            }
+        }
+
+        fn hovered(&self) -> button::Style {
+            let active = self.active();
+
+            button::Style {
+                text_color: match self {
+                    Button::Icon => Color::from_rgb(0.2, 0.2, 0.7),
+                    Button::Filter { selected } if !selected => Color::from_rgb(0.2, 0.2, 0.7),
+                    _ => active.text_color,
+                },
+                shadow_offset: active.shadow_offset + Vector::new(0.0, 1.0),
+                ..active
+            }
+        }
+    }
 }
