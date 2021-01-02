@@ -59,9 +59,9 @@ enum Message {
     Loaded(Result<SavedState, LoadError>),
     Saved(Result<(), SaveError>),
     PathChanged(String),
-    CreateTask,
     FilterChanged(Filter),
     TaskMessage(usize, TaskMessage),
+    ClosePreviewPane(Pane),
 }
 
 #[derive(Debug, Default)]
@@ -77,21 +77,32 @@ struct DocPane {
 #[derive(Debug, Default)]
 struct ImagePane {
     preview_image: String,
+    close_button: button::State,
 }
 
 trait PaneContent {
     fn update(&mut self, message: Message);
-    fn view(&mut self, pane: &Pane) -> Element<Message>;
+    fn view(&mut self, pane: Pane) -> Element<Message>;
 }
 
 impl PaneContent for ImagePane {
     fn update(&mut self, message: Message) {}
-    fn view(&mut self, _: &Pane) -> Element<'_, Message> {
+    fn view(&mut self, pane: Pane) -> Element<'_, Message> {
         println!(
-            "subject=preview_pane status=open image='{}'",
+            "event=preview_pane_opened image=\"{}\"",
             &self.preview_image
         );
         Column::new()
+            .push(
+                Row::new()
+                    .push(
+                        Button::new(&mut self.close_button, Text::new("X"))
+                            .padding(10)
+                            .style(style::Button::Destructive)
+                            .on_press(Message::ClosePreviewPane(pane)),
+                    )
+                    .align_items(Align::End),
+            )
             .push(Text::new(&self.preview_image))
             .push(Image::new(&self.preview_image))
             .align_items(Align::Center)
@@ -125,7 +136,6 @@ impl PaneContent for DocPane {
                     })
                     .collect();
             }
-            Message::CreateTask => {}
             Message::FilterChanged(filter) => {
                 self.filter = filter;
             }
@@ -137,10 +147,11 @@ impl PaneContent for DocPane {
                     doc.update(task_message);
                 }
             }
+            _ => {}
         }
     }
 
-    fn view(&mut self, pane: &Pane) -> Element<Message> {
+    fn view(&mut self, pane: Pane) -> Element<Message> {
         let DocPane {
             path,
             path_value,
@@ -162,8 +173,7 @@ impl PaneContent for DocPane {
             Message::PathChanged,
         )
         .padding(10)
-        .size(16)
-        .on_submit(Message::CreateTask);
+        .size(16);
 
         let controls = controls.view(&docs, *filter);
         let filtered_tasks = docs.iter().filter(|doc| filter.matches(doc));
@@ -174,7 +184,7 @@ impl PaneContent for DocPane {
                 .filter(|(_, doc)| filter.matches(doc))
                 .fold(Column::new().spacing(20), |column, (i, doc)| {
                     column.push(
-                        doc.view(pane)
+                        doc.view(&pane)
                             .map(move |message| Message::TaskMessage(i, message)),
                     )
                 })
@@ -258,6 +268,9 @@ impl Application for FileCabinet {
                             boxed_content.update(message.clone());
                         }
                     }
+                    Message::ClosePreviewPane(pane) => {
+                        state.panes.close(&pane);
+                    }
                     Message::TaskMessage(_, TaskMessage::OpenPreviewPane(path, _)) => {
                         if let Some(doc_pane) = &state.doc_pane {
                             match state.preview_pane {
@@ -269,6 +282,7 @@ impl Application for FileCabinet {
                                         doc_pane,
                                         Box::new(ImagePane {
                                             preview_image: path.clone(),
+                                            close_button: Default::default(),
                                         }),
                                     ) {
                                         // then save the preview pane.
@@ -288,6 +302,7 @@ impl Application for FileCabinet {
                                             doc_pane,
                                             Box::new(ImagePane {
                                                 preview_image: path.clone(),
+                                                close_button: Default::default(),
                                             }),
                                         ) {
                                             // Update the preview pane with state.
@@ -366,7 +381,7 @@ impl Application for FileCabinet {
 
                     // .title_bar(title_bar)
                     // .style(style::Pane { is_focused })
-                    let c: Element<Message> = Container::new(content.view(&pane)).into();
+                    let c: Element<Message> = Container::new(content.view(pane)).into();
                     pane_grid::Content::new(c)
                 })
                 .width(Length::Fill)
@@ -751,6 +766,10 @@ fn icon(unicode: char) -> Text {
 }
 
 fn edit_icon() -> Text {
+    icon('\u{F304}')
+}
+
+fn close_icon() -> Text {
     icon('\u{F303}')
 }
 
