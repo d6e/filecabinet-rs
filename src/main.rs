@@ -13,11 +13,11 @@ use serde::export::Formatter;
 use serde::{Deserialize, Serialize};
 use std::borrow::Borrow;
 use std::collections::linked_list::Iter;
-use std::env;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::path::Path;
 use std::path::PathBuf;
+use std::{env, fs};
 
 mod utils;
 
@@ -435,7 +435,6 @@ pub enum TaskMessage {
     TitleEdited(String),
     PageEdited(String),
     FinishEdition,
-    Update,
     Delete,
     Cancel,
     OpenPreviewPane(String, Pane),
@@ -480,11 +479,24 @@ impl Document {
                 }
             }
             TaskMessage::FinishEdition => {
-                if !self.path.is_empty() {
-                    self.state = TaskState::Idle {
-                        edit_button: button::State::new(),
-                        preview_button: button::State::new(),
-                    }
+                let basename = Path::new(&self.path).parent();
+                let filename = format!(
+                    "{}_{}_{}_{}",
+                    &self.date, &self.institution, &self.title, &self.page
+                );
+                let new_path: String = basename
+                    .and_then(|p| {
+                        // basename is a valid directory, add it and return.
+                        let mut pb = p.to_path_buf();
+                        pb.push(&filename);
+                        pb.to_str().map(|s| s.to_string())
+                    })
+                    .unwrap_or(filename);
+                fs::rename(&self.path, &new_path).unwrap(); // Rename file
+                self.path = new_path.to_string(); // Update UI doc path.
+                self.state = TaskState::Idle {
+                    edit_button: button::State::new(),
+                    preview_button: button::State::new(),
                 }
             }
             TaskMessage::Delete => {}
@@ -570,9 +582,9 @@ impl Document {
                             .push(
                                 Button::new(
                                     submit_button,
-                                    Row::new().spacing(10).push(Text::new("Update")),
+                                    Row::new().spacing(10).push(Text::new("Submit")),
                                 )
-                                .on_press(TaskMessage::Update)
+                                .on_press(TaskMessage::FinishEdition)
                                 .padding(10)
                                 .style(style::Button::Update),
                             )
