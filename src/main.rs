@@ -168,8 +168,8 @@ impl PaneContent for DocPane {
         } else {
             empty_message(match filter {
                 Filter::All => "No files found...",
-                Filter::Normalized => "",
-                Filter::Unnormalized => "",
+                Filter::Normalized => "No files found...",
+                Filter::Unnormalized => "No files found...",
             })
         };
 
