@@ -133,7 +133,11 @@ impl PaneContent for DocPane {
             Message::FilterChanged(filter) => {
                 self.filter = filter;
             }
-            Message::DocMessage(i, DocMessage::Delete) => {
+            Message::DocMessage(i, DocMessage::ConfirmDelete) => {
+                if let Some(doc) = self.docs.get_mut(i) {
+                    doc.update(DocMessage::ConfirmDelete);
+                    fs::remove_file(doc.clone().path).unwrap();
+                }
                 self.docs.remove(i);
             }
             Message::DocMessage(i, doc_message) => {
@@ -419,7 +423,7 @@ pub struct Document {
     extension: String,
     selected: bool,
     encrypted: bool,
-
+    show_delete_confirmation: bool,
     #[serde(skip)]
     state: DocState,
 }
@@ -438,6 +442,8 @@ pub enum DocState {
         delete_button: button::State,
         cancel_button: button::State,
         submit_button: button::State,
+        confirm_yes_button: button::State,
+        confirm_no_button: button::State,
     },
 }
 
@@ -460,6 +466,8 @@ pub enum DocMessage {
     PageEdited(String),
     FinishEdition,
     Delete,
+    ConfirmDelete,
+    ConfirmNo,
     Cancel,
     OpenPreviewPane(String, Pane),
 }
@@ -482,6 +490,7 @@ impl Document {
             extension: extension.to_string(),
             selected: false,
             encrypted: false,
+            show_delete_confirmation: false,
             state: DocState::default(),
         }
     }
@@ -497,9 +506,11 @@ impl Document {
                     institution_input: Default::default(),
                     title_input: Default::default(),
                     page_input: Default::default(),
-                    delete_button: button::State::new(),
-                    cancel_button: button::State::new(),
-                    submit_button: button::State::new(),
+                    delete_button: Default::default(),
+                    cancel_button: Default::default(),
+                    submit_button: Default::default(),
+                    confirm_yes_button: Default::default(),
+                    confirm_no_button: Default::default(),
                 };
             }
             DocMessage::Cancel => {
@@ -533,7 +544,16 @@ impl Document {
                     preview_button: button::State::new(),
                 }
             }
-            DocMessage::Delete => {}
+            DocMessage::Delete => {
+                if self.show_delete_confirmation {
+                    self.show_delete_confirmation = false;
+                } else {
+                    self.show_delete_confirmation = true;
+                }
+            }
+            DocMessage::ConfirmNo => {
+                self.show_delete_confirmation = false;
+            }
             DocMessage::DateEdited(s) => {
                 self.date = s;
             }
@@ -582,6 +602,8 @@ impl Document {
                 delete_button,
                 cancel_button,
                 submit_button,
+                confirm_no_button,
+                confirm_yes_button,
             } => {
                 Column::new()
                     .spacing(10)
@@ -636,6 +658,24 @@ impl Document {
                                 .padding(10)
                                 .style(style::Button::Destructive),
                             )
+                            .push(if self.show_delete_confirmation {
+                                Row::new()
+                                    .push(
+                                        Button::new(confirm_no_button, Text::new("No!"))
+                                            .on_press(DocMessage::ConfirmNo)
+                                            .style(style::Button::Cancel),
+                                    )
+                                    .push(
+                                        Button::new(confirm_yes_button, Text::new("Yes?"))
+                                            .on_press(DocMessage::ConfirmDelete)
+                                            .style(style::Button::Destructive),
+                                    )
+                                    .padding(10)
+                                    .spacing(10)
+                                    .align_items(Align::Center)
+                            } else {
+                                Row::new()
+                            })
                             // Cancel Button
                             .push(
                                 Button::new(
