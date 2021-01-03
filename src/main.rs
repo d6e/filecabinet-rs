@@ -896,20 +896,19 @@ impl SavedState {
 }
 
 mod style {
+    use iced::widget::container::Style;
     use iced::{button, container, Background, Color, Vector};
-
-    const SURFACE: Color = Color::from_rgb(
-        0xF2 as f32 / 255.0,
-        0xF3 as f32 / 255.0,
-        0xF5 as f32 / 255.0,
-    );
 
     pub struct Pane {}
 
     impl container::StyleSheet for Pane {
         fn style(&self) -> container::Style {
             container::Style {
-                background: Some(Background::Color(SURFACE)),
+                background: Some(Background::Color(Color::from_rgb(
+                    0xf8 as f32 / 255.0,
+                    0xed as f32 / 255.0,
+                    0xeb as f32 / 255.0,
+                ))),
                 border_width: 1.0,
                 border_radius: 5.0,
                 border_color: Color::from([0.7, 0.7, 0.7]), // light grey
@@ -934,10 +933,10 @@ mod style {
                 Button::Doc => button::Style {
                     text_color: Color::WHITE,
                     background: Some(Background::Color(Color::from_rgb(
-                        181.0 / 255.0,
-                        101.0 / 255.0,
-                        29.0 / 255.0,
-                    ))), // light brown
+                        0xe5 as f32 / 255.0,
+                        0x6b as f32 / 255.0,
+                        0x6f as f32 / 255.0,
+                    ))), // dark pink
                     border_radius: 5.0,
                     ..Default::default()
                 },
@@ -958,31 +957,49 @@ mod style {
                 }
                 Button::Icon => button::Style {
                     text_color: Color::from_rgb(0.5, 0.5, 0.5),
+                    border_radius: 10.0,
+                    border_color: Color::from_rgb(0.5, 0.5, 0.5),
                     ..button::Style::default()
                 },
                 Button::Refresh => button::Style {
-                    background: Some(Background::Color(Color::from_rgb(0.2, 0.7, 0.2))),
+                    background: Some(Background::Color(Color::from_rgb(
+                        0x24 as f32 / 255.0,
+                        0x7b as f32 / 255.0,
+                        0xa0 as f32 / 255.0,
+                    ))),
                     border_radius: 5.0,
                     text_color: Color::WHITE,
                     shadow_offset: Vector::new(1.0, 1.0),
                     ..button::Style::default()
                 },
                 Button::Destructive => button::Style {
-                    background: Some(Background::Color(Color::from_rgb(0.8, 0.2, 0.2))),
+                    background: Some(Background::Color(Color::from_rgb(
+                        0xef as f32 / 255.0,
+                        0x47 as f32 / 255.0,
+                        0x6f as f32 / 255.0,
+                    ))),
                     border_radius: 5.0,
                     text_color: Color::WHITE,
                     shadow_offset: Vector::new(1.0, 1.0),
                     ..button::Style::default()
                 },
                 Button::Update => button::Style {
-                    background: Some(Background::Color(Color::from_rgb(0.467, 0.867, 0.467))),
+                    background: Some(Background::Color(Color::from_rgb(
+                        0x06 as f32 / 255.0,
+                        0xd6 as f32 / 255.0,
+                        0xa0 as f32 / 255.0,
+                    ))),
                     border_radius: 5.0,
                     text_color: Color::WHITE,
                     shadow_offset: Vector::new(1.0, 1.0),
                     ..button::Style::default()
                 },
                 Button::Cancel => button::Style {
-                    background: Some(Background::Color(Color::from_rgb(0.2, 0.2, 0.2))),
+                    background: Some(Background::Color(Color::from_rgb(
+                        0xff as f32 / 255.0,
+                        0xd1 as f32 / 255.0,
+                        0x66 as f32 / 255.0,
+                    ))),
                     border_radius: 5.0,
                     text_color: Color::WHITE,
                     shadow_offset: Vector::new(1.0, 1.0),
