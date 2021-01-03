@@ -415,8 +415,8 @@ pub struct Document {
     title: String,
     page: String,
     extension: String,
-    completed: bool,  // TODO remove
-    encrypt_it: bool, // TODO remove
+    selected: bool,
+    encrypted: bool,
 
     #[serde(skip)]
     state: DocState,
@@ -450,7 +450,7 @@ impl Default for DocState {
 
 #[derive(Debug, Clone)]
 pub enum DocMessage {
-    Completed(bool),
+    Selected(bool),
     Edit,
     DateEdited(String),
     InstitutionEdited(String),
@@ -478,16 +478,16 @@ impl Document {
             title: options.name.unwrap_or(String::new()),
             page: options.page.unwrap_or(String::from("1")).parse().unwrap(),
             extension: extension.to_string(),
-            completed: false, // TODO: rename to selected
-            encrypt_it: false,
+            selected: false,
+            encrypted: false,
             state: DocState::default(),
         }
     }
 
     fn update(&mut self, message: DocMessage) {
         match message {
-            DocMessage::Completed(completed) => {
-                self.completed = completed;
+            DocMessage::Selected(selected) => {
+                self.selected = selected;
             }
             DocMessage::Edit => {
                 self.state = DocState::Editing {
@@ -554,7 +554,7 @@ impl Document {
                 preview_button,
                 edit_button,
             } => {
-                let checkbox = Checkbox::new(self.completed, "", DocMessage::Completed);
+                let checkbox = Checkbox::new(self.selected, "", DocMessage::Selected);
                 let preview = Button::new(preview_button, Text::new(&self.filename))
                     .on_press(DocMessage::OpenPreviewPane(self.path.clone(), *pane))
                     .style(style::Button::Doc)
