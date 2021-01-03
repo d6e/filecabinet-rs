@@ -31,6 +31,7 @@ enum FileCabinet {
 }
 
 struct State {
+    refresh_state: button::State,
     target_dir_state: text_input::State,
     target_dir: String,
     panes: pane_grid::State<Box<dyn PaneContent>>,
@@ -46,6 +47,7 @@ impl Default for State {
         let (pane_state, pane) =
             pane_grid::State::new(Box::new(DocPane::default()) as Box<dyn PaneContent>);
         State {
+            refresh_state: Default::default(),
             target_dir_state: Default::default(),
             target_dir: "".to_string(),
             panes: pane_state,
@@ -60,6 +62,7 @@ impl Default for State {
 
 #[derive(Debug, Clone)]
 enum Message {
+    RefreshTargetDir(String),
     Loaded(Result<SavedState, LoadError>),
     Saved(Result<(), SaveError>),
     PathChanged(String),
@@ -73,7 +76,6 @@ enum Message {
 #[derive(Debug, Default)]
 struct DocPane {
     scroll: scrollable::State,
-
     filter: Filter,
     controls: Controls,
     docs: Vec<Document>,
@@ -126,17 +128,8 @@ impl PaneContent for DocPane {
         match message {
             Message::Loaded(_) => {}
             Message::Saved(_) => {}
-            Message::PathChanged(value) => {
-                let dir_path = Path::new(&value).to_path_buf();
-                self.docs = utils::list_files(&dir_path)
-                    .iter()
-                    .map(|path| {
-                        let mut full_path = dir_path.clone();
-                        full_path.push(path);
-                        Document::new(full_path.to_str().unwrap().to_string())
-                    })
-                    .collect();
-            }
+            Message::RefreshTargetDir(path) => self.docs = utils::read_docs(&path),
+            Message::PathChanged(path) => self.docs = utils::read_docs(&path),
             Message::FilterChanged(filter) => {
                 self.filter = filter;
             }
@@ -243,13 +236,17 @@ impl Application for FileCabinet {
                     }
                     _ => {}
                 }
-
                 Command::none()
             }
             FileCabinet::Loaded(state) => {
                 let mut saved = false;
 
                 match message {
+                    Message::RefreshTargetDir(_) => {
+                        for (_pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(message.clone());
+                        }
+                    }
                     Message::PathChanged(ref value) => {
                         state.target_dir = value.clone();
                         for (_pane, boxed_content) in state.panes.iter_mut() {
@@ -366,14 +363,9 @@ impl Application for FileCabinet {
                         .style(style::Pane {})
                         .into()
                 })
-                // .width(Length::Fill)
-                // .height(Length::Fill)
                 .on_drag(Message::Dragged)
                 .on_resize(10, Message::Resized)
                 .spacing(10);
-                // .on_click(Message::Clicked)
-                // .on_drag(Message::Dragged)
-                // .on_resize(10, Message::Resized);
 
                 let title = Text::new("filecabinet")
                     .width(Length::Fill)
@@ -393,7 +385,17 @@ impl Application for FileCabinet {
                 Container::new(
                     Column::new()
                         .push(title)
-                        .push(target_dir_input)
+                        .push(
+                            Row::new().spacing(10).push(target_dir_input).push(
+                                Button::new(
+                                    &mut state.refresh_state,
+                                    Text::new("refresh").size(16),
+                                )
+                                .style(style::Button::Refresh)
+                                .padding(10)
+                                .on_press(Message::RefreshTargetDir(state.target_dir.clone())),
+                            ),
+                        )
                         .push(pane_grid)
                         .spacing(10),
                 )
@@ -923,6 +925,7 @@ mod style {
         Update,
         Cancel,
         Doc,
+        Refresh,
     }
 
     impl button::StyleSheet for Button {
@@ -955,6 +958,13 @@ mod style {
                 }
                 Button::Icon => button::Style {
                     text_color: Color::from_rgb(0.5, 0.5, 0.5),
+                    ..button::Style::default()
+                },
+                Button::Refresh => button::Style {
+                    background: Some(Background::Color(Color::from_rgb(0.2, 0.7, 0.2))),
+                    border_radius: 5.0,
+                    text_color: Color::WHITE,
+                    shadow_offset: Vector::new(1.0, 1.0),
                     ..button::Style::default()
                 },
                 Button::Destructive => button::Style {

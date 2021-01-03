@@ -62,6 +62,18 @@ pub fn is_normalized<P: AsRef<Path>>(source: P) -> bool {
     }
 }
 
+pub fn read_docs(path: &str) -> Vec<Document> {
+    let dir_path = Path::new(&path).to_path_buf();
+    list_files(&dir_path)
+        .iter()
+        .map(|path| {
+            let mut full_path = dir_path.clone();
+            full_path.push(path);
+            Document::new(full_path.to_str().unwrap().to_string())
+        })
+        .collect()
+}
+
 pub fn extension<P: AsRef<Path>>(source: P) -> String {
     source
         .as_ref()
