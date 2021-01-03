@@ -1,23 +1,22 @@
 #[macro_use]
 extern crate lazy_static;
-use crate::utils::{parse_date, OptDoc};
+use crate::utils::OptDoc;
 use chrono::{DateTime, Utc};
 use iced::futures::{AsyncReadExt, AsyncWriteExt};
-use iced::widget::pane_grid::{Content, Pane};
+use iced::widget::pane_grid::Pane;
 use iced::{
     button, pane_grid, scrollable, text_input, Align, Application, Button, Checkbox, Column,
     Command, Container, Element, Font, HorizontalAlignment, Image, Length, PaneGrid, Row,
     Scrollable, Settings, Text, TextInput,
 };
-use serde::export::Formatter;
+
 use serde::{Deserialize, Serialize};
-use std::borrow::Borrow;
-use std::collections::linked_list::Iter;
+
 use std::fmt::Debug;
-use std::ops::Deref;
+
 use std::path::Path;
-use std::path::PathBuf;
-use std::{env, fs};
+
+use std::fs;
 
 mod utils;
 
@@ -856,8 +855,6 @@ impl SavedState {
     }
 
     async fn load() -> Result<SavedState, LoadError> {
-        use async_std::prelude::*;
-
         let mut contents = String::new();
 
         let mut file = async_std::fs::File::open(Self::path())
@@ -872,8 +869,6 @@ impl SavedState {
     }
 
     async fn save(self) -> Result<(), SaveError> {
-        use async_std::prelude::*;
-
         let json = serde_json::to_string_pretty(&self).map_err(|_| SaveError::FormatError)?;
 
         let path = Self::path();
@@ -936,7 +931,7 @@ impl SavedState {
 }
 
 mod style {
-    use iced::widget::container::Style;
+
     use iced::{button, container, Background, Color, Vector};
 
     pub struct Pane {}

@@ -1,6 +1,6 @@
 use crate::Document;
 use regex::Regex;
-use std::borrow::Borrow;
+
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
