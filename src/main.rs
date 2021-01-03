@@ -9,15 +9,10 @@ use iced::{
     Command, Container, Element, Font, HorizontalAlignment, Image, Length, PaneGrid, Row,
     Scrollable, Settings, Text, TextInput,
 };
-
 use serde::{Deserialize, Serialize};
-
 use std::fmt::Debug;
-
-use std::path::Path;
-
 use std::fs;
-
+use std::path::Path;
 mod utils;
 
 pub fn main() -> iced::Result {
@@ -360,36 +355,29 @@ impl Application for FileCabinet {
     fn view(&mut self) -> Element<Message> {
         match self {
             FileCabinet::Loading => loading_message(),
-            FileCabinet::Loaded(state) => {
-                let pane_grid = PaneGrid::new(&mut state.panes, |pane, content| {
-                    pane_grid::Content::new(content.view(pane))
-                        .style(style::Pane {})
-                        .into()
-                })
-                .on_drag(Message::Dragged)
-                .on_resize(10, Message::Resized)
-                .spacing(10);
-
-                let title = Text::new("filecabinet")
-                    .width(Length::Fill)
-                    .size(80)
-                    .color([0.5, 0.5, 0.5])
-                    .horizontal_alignment(HorizontalAlignment::Center);
-
-                let target_dir_input = TextInput::new(
-                    &mut state.target_dir_state,
-                    "Specify path to documents",
-                    &*state.target_dir,
-                    Message::PathChanged,
-                )
-                .padding(10)
-                .size(16);
-
-                Container::new(
-                    Column::new()
-                        .push(title)
-                        .push(
-                            Row::new().spacing(10).push(target_dir_input).push(
+            FileCabinet::Loaded(state) => Container::new(
+                Column::new()
+                    .push(
+                        Text::new("filecabinet")
+                            .width(Length::Fill)
+                            .size(80)
+                            .color([0.5, 0.5, 0.5])
+                            .horizontal_alignment(HorizontalAlignment::Center),
+                    )
+                    .push(
+                        Row::new()
+                            .spacing(10)
+                            .push(
+                                TextInput::new(
+                                    &mut state.target_dir_state,
+                                    "Specify path to documents",
+                                    &*state.target_dir,
+                                    Message::PathChanged,
+                                )
+                                .padding(10)
+                                .size(16),
+                            )
+                            .push(
                                 Button::new(
                                     &mut state.refresh_state,
                                     Text::new("refresh").size(16),
@@ -398,15 +386,21 @@ impl Application for FileCabinet {
                                 .padding(10)
                                 .on_press(Message::RefreshTargetDir(state.target_dir.clone())),
                             ),
-                        )
-                        .push(pane_grid)
+                    )
+                    .push(
+                        PaneGrid::new(&mut state.panes, |pane, content| {
+                            pane_grid::Content::new(content.view(pane)).style(style::Pane {})
+                        })
+                        .on_drag(Message::Dragged)
+                        .on_resize(10, Message::Resized)
                         .spacing(10),
-                )
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .padding(10)
-                .into()
-            }
+                    )
+                    .spacing(10),
+            )
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(10)
+            .into(),
         }
     }
 }
