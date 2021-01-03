@@ -1,3 +1,4 @@
+use crate::Document;
 use regex::Regex;
 use std::borrow::Borrow;
 use std::ffi::OsStr;
@@ -10,6 +11,30 @@ pub struct OptDoc {
     pub(crate) page: Option<String>,
 }
 
+/// Represents a Document with fields that were maybe parseable
+impl OptDoc {
+    pub fn new<T: AsRef<Path>>(filename: T) -> OptDoc {
+        let filename = filename.as_ref();
+        let filestem: &str = filename
+            .file_stem()
+            .and_then(OsStr::to_str)
+            .unwrap_or(filename.to_str().unwrap());
+        let v: Vec<&str> = filestem.split('_').collect();
+        OptDoc {
+            date: v.get(0).and_then(parse_date),
+            institution: v.get(1).map(|x| x.to_string()),
+            name: v.get(2).map(|x| x.to_string()),
+            page: v.get(3).and_then(parse_page),
+        }
+    }
+    pub fn is_parseable(&self) -> bool {
+        self.date.is_some()
+            && self.institution.is_some()
+            && self.name.is_some()
+            && self.page.is_some()
+    }
+}
+
 pub fn is_normalized<P: AsRef<Path>>(source: P) -> bool {
     let source = source.as_ref();
     let extension: String = source
@@ -17,7 +42,10 @@ pub fn is_normalized<P: AsRef<Path>>(source: P) -> bool {
         .and_then(std::ffi::OsStr::to_str)
         .map(|s| s.to_ascii_lowercase())
         .unwrap_or(String::new());
-    let doc: OptDoc = to_document(source);
+    let doc = OptDoc::new(source);
+    if !doc.is_parseable() {
+        return false;
+    }
     match source.parent() {
         Some(basename) => {
             let target = basename.join(format!(
@@ -62,21 +90,6 @@ pub fn list_files(path: &PathBuf) -> Vec<String> {
         })
         .map(|x| x.file_name().unwrap().to_str().unwrap().to_owned())
         .collect()
-}
-
-pub fn to_document<T: AsRef<Path>>(filename: T) -> OptDoc {
-    let filename = filename.as_ref();
-    let filestem: &str = filename
-        .file_stem()
-        .and_then(OsStr::to_str)
-        .unwrap_or(filename.to_str().unwrap());
-    let v: Vec<&str> = filestem.split('_').collect();
-    OptDoc {
-        date: v.get(0).and_then(parse_date),
-        institution: v.get(1).map(|x| x.to_string()),
-        name: v.get(2).map(|x| x.to_string()),
-        page: v.get(3).and_then(parse_page),
-    }
 }
 
 lazy_static! {

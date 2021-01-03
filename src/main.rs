@@ -1,6 +1,6 @@
 #[macro_use]
 extern crate lazy_static;
-use crate::utils::{parse_date, to_document};
+use crate::utils::{parse_date, OptDoc};
 use chrono::{DateTime, Utc};
 use iced::futures::{AsyncReadExt, AsyncWriteExt};
 use iced::widget::pane_grid::{Content, Pane};
@@ -407,7 +407,7 @@ impl Application for FileCabinet {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct Document {
+pub struct Document {
     path: String,
     filename: String,
     date: String,
@@ -464,7 +464,7 @@ pub enum DocMessage {
 
 impl Document {
     fn new(path: String) -> Self {
-        let options = to_document(&path);
+        let options = OptDoc::new(&path);
         let now: DateTime<Utc> = Utc::now();
         let tmp = &path.clone();
         let _path = Path::new(tmp);
