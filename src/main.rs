@@ -158,7 +158,7 @@ impl PaneContent for DocPane {
             docs.iter_mut()
                 .enumerate()
                 .filter(|(_, doc)| filter.matches(doc))
-                .fold(Column::new().spacing(20), |column, (i, doc)| {
+                .fold(Column::new().spacing(0), |column, (i, doc)| {
                     column.push(
                         doc.view(&pane)
                             .map(move |message| Message::DocMessage(i, message)),
