@@ -947,7 +947,10 @@ mod style {
                             ..button::Style::default()
                         }
                     } else {
-                        button::Style::default()
+                        button::Style {
+                            border_radius: 10.0,
+                            ..button::Style::default()
+                        }
                     }
                 }
                 Button::Icon => button::Style {
@@ -987,7 +990,10 @@ mod style {
                     Button::Filter { selected } if !selected => Color::from_rgb(0.2, 0.2, 0.7),
                     _ => active.text_color,
                 },
-                shadow_offset: active.shadow_offset + Vector::new(0.0, 1.0),
+                border_width: 2.0,
+                border_radius: self.active().border_radius,
+                border_color: Color::from_rgb(0.5, 0.5, 0.5),
+                // shadow_offset: active.shadow_offset + Vector::new(0.0, 2.0),
                 ..active
             }
         }
