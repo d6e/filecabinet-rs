@@ -612,9 +612,9 @@ dependencies = [
 
 [[package]]
 name = "cocoon"
-version = "0.1.11"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bddd5af4458bfe406a1a69667e05a171794e6bd7735defe001bfdddef932dafa"
+checksum = "303e34c332e248560e84cbfac7c4f1dcda8dbd68529768af0a1ed728a458449d"
 dependencies = [
  "aes-gcm",
  "chacha20poly1305",
