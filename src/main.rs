@@ -311,6 +311,19 @@ impl Application for FileCabinet {
                         for (_pane, boxed_content) in state.panes.iter_mut() {
                             boxed_content.update(message.clone());
                         }
+                        // Refresh after deleting
+                        for (_pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(Message::RefreshTargetDir(state.target_dir.clone()));
+                        }
+                    }
+                    Message::DocMessage(_, DocMessage::FinishEdition) => {
+                        for (_pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(message.clone());
+                        }
+                        // Refresh after editing
+                        for (_pane, boxed_content) in state.panes.iter_mut() {
+                            boxed_content.update(Message::RefreshTargetDir(state.target_dir.clone()));
+                        }
                     }
                     Message::DocMessage(_, ref _doc_message) => {
                         for (_pane, boxed_content) in state.panes.iter_mut() {
