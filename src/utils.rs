@@ -104,6 +104,30 @@ pub fn list_files(path: &PathBuf) -> Vec<String> {
         .collect()
 }
 
+pub fn to_camelcase(text: &str) -> String {
+    let text = text.trim();
+    let mut result = String::with_capacity(text.len());
+    let mut start_of_word = true;
+    for c in text.chars() {
+        if c == ' ' {
+            start_of_word = true;
+        } else if start_of_word {
+            result.push(c.to_ascii_uppercase());
+            start_of_word = false;
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+#[test]
+fn test_to_camelcase() {
+    assert_eq!(to_camelcase("hello this is a test"), "HelloThisIsATest");
+    assert_eq!(to_camelcase("_a"), "_a");
+    assert_eq!(to_camelcase("boopLoop"), "BoopLoop");
+}
+
 lazy_static! {
     static ref RE_PARSE_PAGE: Regex = Regex::new(r"(\d+)").unwrap();
 }

@@ -526,6 +526,8 @@ impl Document {
                 }
             }
             DocMessage::FinishEdition => {
+                self.institution = utils::to_camelcase(&*self.institution);
+                self.title = utils::to_camelcase(&*self.title);
                 let basename = Path::new(&self.path).parent();
                 let filename = format!(
                     "{}_{}_{}_{}.{}",
