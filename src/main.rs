@@ -15,7 +15,10 @@ use std::fs;
 use std::path::Path;
 mod utils;
 
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 pub fn main() -> iced::Result {
+    println!("VERSION: {}", VERSION);
     FileCabinet::run(Settings::default())
 }
 
